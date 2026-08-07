@@ -1,6 +1,6 @@
 import torch
 try:
-    from diffusers import Flux2KleinPipeline
+    from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
 except ImportError:  # pragma: no cover - compatibility fallback
     from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
 
