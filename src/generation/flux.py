@@ -1,21 +1,36 @@
 import torch
-from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
+try:
+    from diffusers import Flux2KleinPipeline
+except ImportError:  # pragma: no cover - compatibility fallback
+    from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
+
 from src.core.config import FLUX_MODEL, HF_TOKEN
-def loading_model():
+
+
+def loading_model(
+    model_id: str = FLUX_MODEL,
+    token: str | None = HF_TOKEN,
+    device: str | None = None,
+    torch_dtype: torch.dtype | None = None,
+):
     """
     Load FLUX2-klein-4B once.
     """
+    resolved_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    resolved_dtype = torch_dtype or (
+        torch.float16 if resolved_device == "cuda" else torch.float32
+    )
+    resolved_token = token or None
+
     print("=" * 60)
-    print(f"Loading {FLUX_MODEL}")
+    print(f"Loading {model_id}")
     print("=" * 60)
     pipe = Flux2KleinPipeline.from_pretrained(
-        FLUX_MODEL,
-        torch_dtype=torch.float16,
-        # Neu chi co 1 GPU thi bo phan device_map, max_memory 
-        token=HF_TOKEN
+        model_id,
+        torch_dtype=resolved_dtype,
+        token=resolved_token,
     )
-    # Chi co 1 GPU: pipe.to("cuda")
-    pipe.to("cuda") 
+    pipe.to(resolved_device)
     try:
         pipe.enable_attention_slicing()
     except Exception:

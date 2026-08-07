@@ -1,14 +1,24 @@
-from dotenv import load_dotenv 
-import os 
-import torch 
-import numpy as np 
-import random 
-load_dotenv() 
+from dotenv import load_dotenv
+from pathlib import Path
+import os
+import torch
+import numpy as np
+import random
+
+load_dotenv()
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # READ ENVIRONMENT 
 HF_TOKEN = os.getenv('HF_TOKEN')
-JSON_PATH = "data/input/eccv_train.json"
-OUTPUT_DIR = "data/output"
+JSON_PATH = os.getenv(
+    "JSON_PATH",
+    str(PROJECT_ROOT / "data" / "input" / "eccv_train.json"),
+)
+OUTPUT_DIR = os.getenv(
+    "OUTPUT_DIR",
+    str(PROJECT_ROOT / "data" / "output"),
+)
 GENERAL_MODEL = "google/gemma-4-12B" 
 FLUX_REPO = "black-forest-labs/FLUX.2-klein-9B"
 # black-forest-labs/FLUX.2-dev

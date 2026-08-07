@@ -3,16 +3,17 @@ import os
 import torch 
 import re 
 import traceback
-import matplotlib.pyplot as plt
 from io import BytesIO
 import json 
 from src.core.config import (
         OUTPUT_DIR, 
+        BASE_SEED,
         random_seed, 
         LIMIT_IMAGES, 
         HEADERS, 
         DOWNLOAD_RETRIES, 
         IMAGE_SIZE, 
+        NUM_INFERENCE_STEPS,
         GUIDANCE_SCALE, 
         REQUEST_TIMEOUT)
 from PIL import Image
@@ -22,7 +23,12 @@ from src.generation.flux import loading_model as loading_flux
 from src.vision.rescue_instruction import generate_rescue_instruction 
 from src.vision.scene_description import generate_scene_description
 from src.vision import build_flux_prompt
-from src.helper.image import download_image, resize_center_crop, generate_rescue_image
+from src.helper.image import (
+    download_image,
+    resize_center_crop,
+    generate_rescue_image,
+    save_generated_image,
+)
 from src.helper.memory import cleanup
 print('Hello, Cloudian 💙 Cloud') 
 
@@ -34,16 +40,38 @@ os.makedirs(
 random_seed() 
 data = load() 
 
+
+def make_safe_stem(image_key: str) -> str:
+    """
+    Build a filesystem-safe stem from the full dataset key.
+
+    Using the full key avoids collisions between samples that share the
+    same basename in different folders.
+    """
+    normalized_key = image_key.replace("/", "_").replace("\\", "_")
+    return re.sub(
+        r"[^a-zA-Z0-9]+",
+        "_",
+        normalized_key,
+    ).strip("_")
+
 # Loading model 
 vision_model, vision_processor = loading_gemma() 
 pipe = loading_flux() 
 
 
 # Starting pipeline 
+count = 0
+skipped = 0
 evaluation_records = []
 metadata_dir = os.path.join(
     OUTPUT_DIR,
     "_metadata",
+)
+
+os.makedirs(
+    metadata_dir,
+    exist_ok=True,
 )
 
 for img_key, img_info in data.items():
@@ -84,13 +112,7 @@ for img_key, img_info in data.items():
         # 2. Resume Check
         # ==================================================
 
-        safe_name = re.sub(
-            r"[^a-zA-Z0-9]+",
-            "_",
-            os.path.splitext(
-                os.path.basename(img_key)
-            )[0],
-        ).strip("_")
+        safe_name = make_safe_stem(img_key)
 
         output_path = os.path.join(
             OUTPUT_DIR,
@@ -218,8 +240,8 @@ for img_key, img_info in data.items():
                 image=original_image,
                 prompt=flux_prompt,
                 guidance_scale=GUIDANCE_SCALE,
-                num_inference_steps=5,
-                seed=42 + count,
+                num_inference_steps=NUM_INFERENCE_STEPS,
+                seed=BASE_SEED + count,
             )
 
         except torch.cuda.OutOfMemoryError:
@@ -234,8 +256,10 @@ for img_key, img_info in data.items():
         # ==================================================
         # 8. Save Image
         # ==================================================
-        generated_image.save(
-            output_path,
+        output_path = save_generated_image(
+            image=generated_image,
+            output_dir=OUTPUT_DIR,
+            image_name=f"{safe_name}.png",
         )
         print(
             f"Saved -> {output_path}"
@@ -254,11 +278,12 @@ for img_key, img_info in data.items():
             "output_path": output_path,
         }
         evaluation_records.append(metadata)
+        metadata_path = os.path.join(
+            metadata_dir,
+            f"{safe_name}.json",
+        )
         with open(
-            os.path.join(
-                metadata_dir,
-                f"{safe_name}.json",
-            ),
+            metadata_path,
             "w",
             encoding="utf-8",
         ) as f:

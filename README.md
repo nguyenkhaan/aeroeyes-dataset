@@ -43,9 +43,16 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### 5. Run on VPS with Slurm
+
+```bash
+sbatch sbatch.sh
+```
+
+Run the batch command from the repository root so the relative log paths resolve correctly. If your virtual environment lives elsewhere, set `VENV_PATH` before submitting the job.
+
 ## Notes
 
 - The project is designed for GPU execution.
 - For best performance, use an NVIDIA GPU that meets or exceeds the 40 GB VRAM requirement.
 - If your CUDA driver or toolkit differs from the environment used to build the dependencies, you may need to adjust the PyTorch and CUDA packages accordingly.
-
