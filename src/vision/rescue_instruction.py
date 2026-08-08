@@ -1,6 +1,8 @@
 
 import torch
+from typing import Any, cast
 from src.core.config import MAX_NEW_TOKENS
+from src.vision.prompting import build_vision_inputs
 
 
 def _decode_model_output(vision_processor, generation) -> str:
@@ -84,28 +86,13 @@ def generate_rescue_instruction(
         },
     ]
 
-    # Gemma 3
-    inputs = vision_processor.apply_chat_template(
-        messages, add_generation_prompt=True, tokenize=True,
-        return_dict=True, return_tensors="pt"
+    inputs = build_vision_inputs(
+        vision_processor,
+        messages=messages,
+        text=f"{system_prompt.strip()}\n\n{user_prompt.strip()}",
     ).to(vision_model.device)
-    
+    inputs = cast(dict[str, Any], inputs)
     input_len = inputs["input_ids"].shape[-1]
-    """
-    # Gemma 3 
-    with torch.inference_mode():
-        generation = vision_model.generate(**inputs, max_new_tokens=320, do_sample=False)
-    generation = generation[0][input_len:]
-    instruction = vision_processor.decode(
-        generation,
-        skip_special_tokens=True,
-    ).strip()
-    return instruction
-
-    # Gemma 3 
-    """
-    ### Gemma 4 
-
     with torch.inference_mode(): 
         outputs = vision_model.generate(
             **inputs,
