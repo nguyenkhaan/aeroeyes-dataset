@@ -8,6 +8,22 @@ class VisionInputs(Protocol):
         ...
 
 
+def _ensure_image_token(text: str, image_count: int = 1) -> str:
+    """
+    Make sure the prompt contains at least one image placeholder.
+
+    Some vision processors expect a literal `<|image|>` token in the text
+    prompt whenever images are passed separately.
+    """
+    if image_count <= 0:
+        return text
+
+    if "<|image|>" in text or "<image>" in text:
+        return text
+
+    return ("<|image|>\n" * image_count) + text.strip()
+
+
 def build_vision_inputs(
     vision_processor,
     *,
@@ -19,10 +35,9 @@ def build_vision_inputs(
     Build model inputs with a chat-template path when available and a
     plain processor fallback otherwise.
     """
-    chat_template = getattr(vision_processor, "chat_template", None)
     apply_chat_template = getattr(vision_processor, "apply_chat_template", None)
 
-    if messages is not None and callable(apply_chat_template) and chat_template:
+    if messages is not None and callable(apply_chat_template):
         return cast(
             VisionInputs,
             apply_chat_template(
@@ -38,6 +53,8 @@ def build_vision_inputs(
         "return_tensors": "pt",
     }
     if text is not None:
+        if image is not None:
+            text = _ensure_image_token(text)
         processor_kwargs["text"] = text
     if image is not None:
         processor_kwargs["images"] = image
