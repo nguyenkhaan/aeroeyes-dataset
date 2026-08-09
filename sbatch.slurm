@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=mps:a100:2
-#SBATCH --mem=12G
+#SBATCH --mem=14G
 #SBATCH --time=24:60:00
 
 
@@ -25,7 +25,7 @@ module load shared python312
 # ===============================
 
 PYTHON=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv/bin/python
-REQUIRED_VRAM=30720
+REQUIRED_VRAM=32768
 CHECK_OUT=$(/usr/local/bin/gpu_check.sh $REQUIRED_VRAM $SLURM_JOB_ID)
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 10 ]; then echo "$CHECK_OUT"; exit 0; fi

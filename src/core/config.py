@@ -19,7 +19,7 @@ OUTPUT_DIR = os.getenv(
     "OUTPUT_DIR",
     str(PROJECT_ROOT / "data" / "output"),
 )
-GENERAL_MODEL = "google/gemma-4-12B" 
+GENERAL_MODEL = "google/gemma-4-12B-it" 
 FLUX_REPO = "black-forest-labs/FLUX.2-klein-9B"
 # black-forest-labs/FLUX.2-dev
 FLUX_MODEL = FLUX_REPO

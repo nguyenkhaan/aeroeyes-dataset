@@ -19,7 +19,7 @@ def loading_model(
 
     vision_model = AutoModelForImageTextToText.from_pretrained(
         model_id,
-        torch_dtype=resolved_dtype,
+        dtype="auto",
         device_map=device_map,
         token=resolved_token,
     ).eval()
