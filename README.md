@@ -36,14 +36,16 @@ conda activate rescue-image
 ```bash
 pip install -r requirements.txt
 ```
-
-### 4. Verify the installation
+### 4. Create the data folder 
+- Create a data folder in the root. Including 2 subfolders: data/input and data/output 
+- We are using `incidents1M` for dataset. You can get here: https://github.com/ethanweber/IncidentsDataset. Thank you for authors. 
+### 5. Verify the installation
 
 ```bash
 python main.py
 ```
 
-### 5. Run on VPS with Slurm
+### 6. Run on VPS with Slurm
 
 ```bash
 sbatch sbatch.sh
@@ -56,3 +58,5 @@ Run the batch command from the repository root so the relative log paths resolve
 - The project is designed for GPU execution.
 - For best performance, use an NVIDIA GPU that meets or exceeds the 40 GB VRAM requirement.
 - If your CUDA driver or toolkit differs from the environment used to build the dependencies, you may need to adjust the PyTorch and CUDA packages accordingly.
+
+Build with Cloudian 💙 Cloud
