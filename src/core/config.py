@@ -19,6 +19,18 @@ OUTPUT_DIR = os.getenv(
     "OUTPUT_DIR",
     str(PROJECT_ROOT / "data" / "output"),
 )
+REAL_IMAGES_DIR = os.getenv(
+    "REAL_IMAGES_DIR",
+    str(PROJECT_ROOT / "data" / "real_reference"),
+)
+GEN_IMAGES_DIR = os.getenv(
+    "GEN_IMAGES_DIR",
+    str(PROJECT_ROOT / "data" / "gen_reference"),
+)
+CMMD_REPO_DIR = os.getenv(
+    "CMMD_REPO_DIR",
+    str(PROJECT_ROOT / "cmmd_pt"),
+)
 GENERAL_MODEL = "google/gemma-4-12B-it" 
 FLUX_REPO = "black-forest-labs/FLUX.2-klein-9B"
 # black-forest-labs/FLUX.2-dev
@@ -34,6 +46,15 @@ MAX_NEW_TOKENS = 128
 NUM_INFERENCE_STEPS = 6 # 15
 GUIDANCE_SCALE = 1.0 # 3.5 
 BASE_SEED = 50
+# ----------------------------------------------------------
+# Quality Evaluation (humaninstruction-ver2-8)
+# ----------------------------------------------------------
+CLIP_MODEL_ID = "openai/clip-vit-base-patch16"
+O_SCORE_THRESHOLD = 0.55
+SSIM_MAX_THRESHOLD = 0.90
+SC_NORM_DIVISOR = 40.0
+CMMD_BATCH_SIZE = 16
+CMMD_MAX_COUNT = 30000
 # ----------------------------------------------------------
 # HTTP Headers
 # ----------------------------------------------------------

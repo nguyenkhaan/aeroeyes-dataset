@@ -7,6 +7,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 data/output/
+data/real_reference/
+data/gen_reference/
+cmmd_pt/
 # C extensions
 *.so
 logs/
