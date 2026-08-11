@@ -1,0 +1,31 @@
+# Optional dependencies for SDQM.
+# Install after base requirements:
+#   pip install -r requirements-sdqm.txt
+#
+# Clone SDQM:
+#   git clone https://github.com/ayushzenith/SDQM.git third_party/SDQM
+#
+# Phase 3 V-Info (custom ultralytics, Linux VPS recommended):
+#   pip install -e third_party/SDQM/dataset_interpretability/v_info/ultralytics
+
+deap
+mauve-text
+openai-clip
+scipy
+numpy
+torch
+pandas
+Pillow
+torchvision
+matplotlib
+pyyaml
+transformers
+opencv-python
+autokeras
+fiftyone
+albumentations
+pycocotools
+tqdm
+scikit-learn
+scikit-image
+tensorflow

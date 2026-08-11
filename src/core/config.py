@@ -56,6 +56,77 @@ SC_NORM_DIVISOR = 40.0
 CMMD_BATCH_SIZE = 16
 CMMD_MAX_COUNT = 30000
 # ----------------------------------------------------------
+# SDQM (Synthetic Dataset Quality Metric)
+# See docs/pipeline/sdqm-integration-plan.md
+# ----------------------------------------------------------
+SDQM_REPO_DIR = os.getenv(
+    "SDQM_REPO_DIR",
+    str(PROJECT_ROOT / "third_party" / "SDQM"),
+)
+SDQM_OUTPUT_DIR = os.getenv(
+    "SDQM_OUTPUT_DIR",
+    str(Path(OUTPUT_DIR) / "sdqm"),
+)
+SDQM_ENABLED = os.getenv("SDQM_ENABLED", "true").lower() in ("1", "true", "yes")
+SDQM_EMBEDDING_MODEL = os.getenv(
+    "SDQM_EMBEDDING_MODEL",
+    "facebook/dinov2-small",
+)
+SDQM_MODEL_TEXT = os.getenv(
+    "SDQM_MODEL_TEXT",
+    "firefighter . rescue boat . helicopter . ambulance . emergency vehicle .",
+)
+SDQM_YOLO_DATA_YAML = os.getenv(
+    "SDQM_YOLO_DATA_YAML",
+    str(PROJECT_ROOT / "config" / "sdqm" / "data.yaml"),
+)
+SDQM_YOLO_EXPORT = os.getenv("SDQM_YOLO_EXPORT", "true").lower() in ("1", "true", "yes")
+SDQM_GROUNDING_DINO_MODEL = os.getenv(
+    "SDQM_GROUNDING_DINO_MODEL",
+    "IDEA-Research/grounding-dino-tiny",
+)
+SDQM_BOX_THRESHOLD = float(os.getenv("SDQM_BOX_THRESHOLD", "0.25"))
+SDQM_TEXT_THRESHOLD = float(os.getenv("SDQM_TEXT_THRESHOLD", "0.25"))
+SDQM_METRIC_TYPES = [
+    "similarity",
+    "fdg",
+    "lcm",
+    "separability",
+    "distribution",
+    "bounding_box",
+    "label_overlap",
+    "spatial",
+]
+SDQM_VINFO_ENABLED = os.getenv("SDQM_VINFO_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+SDQM_VINFO_DATASET = os.getenv("SDQM_VINFO_DATASET", "rescue")
+SDQM_HISTORY_CSV = os.getenv(
+    "SDQM_HISTORY_CSV",
+    str(Path(SDQM_OUTPUT_DIR) / "sdqm_history.csv"),
+)
+SDQM_MAP_CSV = os.getenv("SDQM_MAP_CSV", "")
+SDQM_MAP_COLUMN = os.getenv("SDQM_MAP_COLUMN", "map")
+SDQM_MAP_VALUE = os.getenv("SDQM_MAP_VALUE")
+SDQM_APPEND_HISTORY = os.getenv("SDQM_APPEND_HISTORY", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+SDQM_RUN_REGRESSION = os.getenv("SDQM_RUN_REGRESSION", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+SDQM_MIN_REGRESSION_ROWS = int(os.getenv("SDQM_MIN_REGRESSION_ROWS", "3"))
+SDQM_MIN_IMAGES = 2
+SDQM_SUMMARY_PATH = os.getenv(
+    "SDQM_SUMMARY_PATH",
+    str(PROJECT_ROOT / "reports" / "sdqm_summary.md"),
+)
+# ----------------------------------------------------------
 # HTTP Headers
 # ----------------------------------------------------------
 
