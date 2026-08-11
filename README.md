@@ -45,6 +45,20 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### SDQM setup (optional)
+
+SDQM runs after the image-generation batch and requires its upstream repository
+and optional dependencies:
+
+```bash
+git clone https://github.com/ayushzenith/SDQM.git third_party/SDQM
+pip install -r requirements-sdqm.txt
+```
+
+Set `SDQM_MAP_VALUE` to the detector mAP for the current run when collecting
+SDQM-vs-mAP regression history. The dataset report is written to
+`reports/sdqm_summary.md` by default.
+
 ### 6. Run on VPS with Slurm
 
 ```bash

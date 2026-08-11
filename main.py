@@ -20,16 +20,24 @@ from src.core.config import (
     OUTPUT_DIR,
     REAL_IMAGES_DIR,
     REQUEST_TIMEOUT,
+    SDQM_ENABLED,
+    SDQM_MIN_IMAGES,
+    SDQM_VINFO_ENABLED,
+    SDQM_YOLO_EXPORT,
     random_seed,
 )
 from src.evaluation import (
     QualityEvaluators,
+    attach_sdqm_metadata,
+    check_custom_ultralytics,
     compute_dataset_cmmd,
+    compute_dataset_sdqm,
     compute_o_score,
     compute_ssim,
     evaluate_quality,
     load_evaluators,
     passes_quality_gate,
+    write_metadata_jsonl,
 )
 from src.generation.flux import loading_model as loading_flux
 from src.generation.gemma import loading_model as loading_gemma
@@ -127,6 +135,58 @@ def run_cmmd_report() -> float | None:
         return cmmd_score
     except Exception as exc:
         print(f"CMMD calculation failed: {exc}")
+        return None
+
+
+def run_sdqm_report() -> dict[str, float] | None:
+    if not SDQM_ENABLED:
+        print("SDQM disabled (SDQM_ENABLED=false).")
+        return None
+
+    if not os.path.isdir(REAL_IMAGES_DIR) or not os.path.isdir(GEN_IMAGES_DIR):
+        return None
+
+    real_images = [
+        name
+        for name in os.listdir(REAL_IMAGES_DIR)
+        if name.lower().endswith((".jpg", ".jpeg", ".png"))
+    ]
+    gen_images = [
+        name
+        for name in os.listdir(GEN_IMAGES_DIR)
+        if name.lower().endswith((".jpg", ".jpeg", ".png"))
+    ]
+    if len(real_images) < SDQM_MIN_IMAGES or len(gen_images) < SDQM_MIN_IMAGES:
+        print(
+            "SDQM skipped: need at least "
+            f"{SDQM_MIN_IMAGES} real and synthetic images."
+        )
+        return None
+
+    print("Computing SDQM metrics...")
+    if SDQM_YOLO_EXPORT:
+        print("YOLO auto-labeling enabled (Grounding DINO).")
+    if SDQM_VINFO_ENABLED:
+        ultralytics_ready, ultralytics_message = check_custom_ultralytics()
+        if ultralytics_ready:
+            print("V-Info enabled (custom ultralytics detected).")
+        else:
+            print(f"V-Info will be skipped: {ultralytics_message}")
+    cleanup()
+    try:
+        sdqm_metrics = compute_dataset_sdqm(
+            ref_dir=REAL_IMAGES_DIR,
+            eval_dir=GEN_IMAGES_DIR,
+        )
+        print("SDQM metrics:")
+        for metric_name, metric_value in sorted(sdqm_metrics.items()):
+            print(f"  {metric_name}: {metric_value:.4f}")
+        return sdqm_metrics
+    except FileNotFoundError as exc:
+        print(f"SDQM setup incomplete: {exc}")
+        return None
+    except Exception as exc:
+        print(f"SDQM calculation failed: {exc}")
         return None
 
 
@@ -334,3 +394,10 @@ if csv_path:
     print(f"CSV Report: {csv_path}")
 
 run_cmmd_report()
+sdqm_metrics = run_sdqm_report()
+if sdqm_metrics:
+    evaluation_records = attach_sdqm_metadata(evaluation_records, sdqm_metrics)
+
+metadata_jsonl_path = write_metadata_jsonl(evaluation_records, OUTPUT_DIR)
+if metadata_jsonl_path:
+    print(f"Metadata JSONL: {metadata_jsonl_path}")
