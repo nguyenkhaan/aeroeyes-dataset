@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pandas as pd
@@ -59,7 +60,7 @@ def compute_metric_map_correlations(
 
 def append_sdqm_history_row(
     history_csv: str | Path,
-    row: dict[str, float | str | int],
+    row: Mapping[str, float | str | int],
 ) -> Path:
     history_path = Path(history_csv)
     history_path.parent.mkdir(parents=True, exist_ok=True)
