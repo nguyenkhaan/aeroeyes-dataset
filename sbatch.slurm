@@ -47,7 +47,7 @@ print("GPU name :", torch.cuda.get_device_name(0) if torch.cuda.is_available() e
 # ===============================
 # Run project
 # ===============================
-
+export SDQM_ENABLED=false
 $PYTHON main.py
 
 echo "Done."
