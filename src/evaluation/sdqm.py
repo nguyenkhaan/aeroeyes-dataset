@@ -38,6 +38,21 @@ SDQM_IMPORT_SUBDIRS = (
     "separability",
     "spatial_distribution",
 )
+SDQM_REPORT_FILENAME = "sdqm_report.json"
+
+
+def write_sdqm_status_report(
+    output_dir: str | Path,
+    status_report: dict[str, object],
+) -> Path:
+    report_dir = Path(output_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / SDQM_REPORT_FILENAME
+    report_path.write_text(
+        json.dumps(status_report, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return report_path
 
 
 def _ensure_sdqm_import_paths(repo_dir: str | Path) -> None:
@@ -298,6 +313,7 @@ def compute_dataset_sdqm(
     regression_results = _maybe_run_regression(sdqm_dir, regression_csv)
 
     report = {
+        "status": "completed",
         "ref_dir": str(Path(ref_dir).resolve()),
         "eval_dir": str(Path(eval_dir).resolve()),
         "real_image_count": len(real_images),
@@ -314,7 +330,7 @@ def compute_dataset_sdqm(
         "summary_path": str(Path(SDQM_SUMMARY_PATH).resolve()),
     }
 
-    report_path = sdqm_dir / "sdqm_report.json"
+    report_path = sdqm_dir / SDQM_REPORT_FILENAME
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     write_sdqm_summary(report)
 
