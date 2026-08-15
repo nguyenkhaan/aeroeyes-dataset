@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=mps:a100:2
-#SBATCH --mem=14G
+#SBATCH --mem=12G
 #SBATCH --time=24:60:00
 
 
@@ -25,7 +25,7 @@ module load shared python312
 # ===============================
 
 PYTHON=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv/bin/python
-REQUIRED_VRAM=32768
+REQUIRED_VRAM=30720
 CHECK_OUT=$(/usr/local/bin/gpu_check.sh $REQUIRED_VRAM $SLURM_JOB_ID)
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 10 ]; then echo "$CHECK_OUT"; exit 0; fi
@@ -47,7 +47,8 @@ print("GPU name :", torch.cuda.get_device_name(0) if torch.cuda.is_available() e
 # ===============================
 # Run project
 # ===============================
-export SDQM_ENABLED=false
+export SDQL_ENABLED=false
 $PYTHON main.py
 
 echo "Done."
+
