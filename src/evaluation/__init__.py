@@ -12,6 +12,7 @@ from src.evaluation.sdqm_metadata import attach_sdqm_metadata, write_metadata_js
 from src.evaluation.sdqm_regression import run_sdqm_regression
 from src.evaluation.sdqm_vinfo import check_custom_ultralytics, compute_vinfo_metrics
 from src.evaluation.yolo_export import export_yolo_dataset, export_yolo_pair
+from src.evaluation.reporting import run_dataset_evaluation
 
 __all__ = [
     "QualityEvaluators",
@@ -28,5 +29,6 @@ __all__ = [
     "load_evaluators",
     "passes_quality_gate",
     "run_sdqm_regression",
+    "run_dataset_evaluation",
     "write_metadata_jsonl",
 ]

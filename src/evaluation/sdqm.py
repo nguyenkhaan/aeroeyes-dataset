@@ -27,7 +27,11 @@ from src.core.config import (
 )
 from src.evaluation.sdqm_embedding import embed_image_directory, list_images
 from src.evaluation.sdqm_regression import append_sdqm_history_row, run_sdqm_regression
-from src.evaluation.sdqm_vinfo import check_custom_ultralytics, compute_vinfo_metrics
+from src.evaluation.sdqm_vinfo import (
+    check_custom_ultralytics,
+    compute_vinfo_metrics,
+    validate_vinfo_dataset,
+)
 from src.evaluation.yolo_export import export_yolo_pair
 
 SDQM_IMPORT_SUBDIRS = (
@@ -61,6 +65,12 @@ def _load_calculate_sdqm():
         )
 
     _ensure_sdqm_import_paths(SDQM_REPO_DIR)
+    ultralytics_ready, ultralytics_message = check_custom_ultralytics()
+    if not ultralytics_ready:
+        raise RuntimeError(
+            "SDQM requires the custom ultralytics fork before it can load: "
+            f"{ultralytics_message}"
+        )
 
     spec = importlib.util.spec_from_file_location("sdqm_main", sdqm_main)
     if spec is None or spec.loader is None:
@@ -223,6 +233,8 @@ def compute_dataset_sdqm(
 
     use_yolo_export = SDQM_YOLO_EXPORT if export_yolo is None else export_yolo
     use_vinfo = SDQM_VINFO_ENABLED if include_vinfo is None else include_vinfo
+    if use_vinfo:
+        validate_vinfo_dataset(SDQM_VINFO_DATASET)
     real_yolo_root: Path | None = None
     synthetic_yolo_root: Path | None = None
 
@@ -290,7 +302,8 @@ def compute_dataset_sdqm(
                     )
                     flattened.update(vinfo_metrics)
                     vinfo_status = "completed"
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
+                    # V-Info is optional; upstream validator failures must not discard base SDQM metrics.
                     print(f"V-Info calculation failed: {exc}")
                     vinfo_status = f"failed: {exc}"
 

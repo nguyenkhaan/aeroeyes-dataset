@@ -11,7 +11,7 @@ def _load_compute_cmmd():
     if not cmmd_main.is_file():
         raise FileNotFoundError(
             f"CMMD repo not found at {cmmd_main}. "
-            "Clone it with: git clone https://github.com/sayakpaul/cmmd-pytorch.git cmmd_pt"
+            "Clone it with: git clone https://github.com/sayakpaul/cmmd-pytorch.git cmmd-pytorch"
         )
 
     spec = importlib.util.spec_from_file_location(

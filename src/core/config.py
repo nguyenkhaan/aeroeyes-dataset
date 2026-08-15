@@ -29,7 +29,7 @@ GEN_IMAGES_DIR = os.getenv(
 )
 CMMD_REPO_DIR = os.getenv(
     "CMMD_REPO_DIR",
-    str(PROJECT_ROOT / "cmmd_pt"),
+    str(PROJECT_ROOT / "cmmd-pytorch"),
 )
 GENERAL_MODEL = "google/gemma-4-12B-it" 
 FLUX_REPO = "black-forest-labs/FLUX.2-klein-9B"
@@ -97,7 +97,7 @@ SDQM_METRIC_TYPES = [
     "label_overlap",
     "spatial",
 ]
-SDQM_VINFO_ENABLED = os.getenv("SDQM_VINFO_ENABLED", "true").lower() in (
+SDQM_VINFO_ENABLED = os.getenv("SDQM_VINFO_ENABLED", "false").lower() in (
     "1",
     "true",
     "yes",
