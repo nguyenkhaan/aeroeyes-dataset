@@ -39,7 +39,7 @@ FLUX_MODEL = FLUX_REPO
 # Generation Parameters
 # ----------------------------------------------------------
 IMAGE_SIZE = 1024
-LIMIT_IMAGES = 5
+LIMIT_IMAGES = 1
 REQUEST_TIMEOUT = 30
 DOWNLOAD_RETRIES = 3
 MAX_NEW_TOKENS = 256

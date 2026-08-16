@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from heatmap_comparison import HeatmapComparison
-from spatial_distribution import SpatialDistribution
+from .heatmap_comparison import HeatmapComparison
+from .spatial_distribution import SpatialDistribution
 
 
 def append_results_to_csv(results: dict, output_dir: str) -> None:
