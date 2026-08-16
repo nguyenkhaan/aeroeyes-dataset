@@ -34,26 +34,15 @@ from src.evaluation.sdqm_vinfo import (
 )
 from src.evaluation.yolo_export import export_yolo_pair
 
-SDQM_IMPORT_SUBDIRS = (
-    "dataset_selection",
-    "dataset_similarity",
-    "labels_and_characteristics",
-    "pixel_intensity",
-    "separability",
-    "spatial_distribution",
-)
-
 
 def _ensure_sdqm_import_paths(repo_dir: str | Path) -> None:
     repo_root = Path(repo_dir).resolve()
-    import_paths = [repo_root]
-    import_paths.extend(repo_root / subdir for subdir in SDQM_IMPORT_SUBDIRS)
+    if not repo_root.is_dir():
+        return
 
-    for import_path in import_paths:
-        if import_path.is_dir():
-            path_text = str(import_path)
-            if path_text not in sys.path:
-                sys.path.insert(0, path_text)
+    path_text = str(repo_root)
+    if path_text not in sys.path:
+        sys.path.insert(0, path_text)
 
 
 def _load_calculate_sdqm():
@@ -77,7 +66,15 @@ def _load_calculate_sdqm():
         raise ImportError(f"Could not load SDQM module from {sdqm_main}")
 
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except ModuleNotFoundError as exc:
+        missing_module = exc.name or "an SDQM dependency"
+        raise ModuleNotFoundError(
+            "SDQM dependency is missing: "
+            f"{missing_module}. Install SDQM dependencies with: "
+            "python -m pip install -r requirements-sdqm.txt"
+        ) from exc
     return module.calculate_sdqm
 
 

@@ -9,6 +9,8 @@
 #SBATCH --mem=12G
 #SBATCH --time=24:00:00
 
+set -euo pipefail
+
 # ===============================
 # Load environment
 # ===============================
@@ -85,7 +87,7 @@ echo "Job: $SLURM_JOB_ID | Node: $SLURMD_NODENAME | GPU: $CUDA_VISIBLE_DEVICES |
 # Check Python / PyTorch / CUDA
 # ===============================
 
-$PYTHON -u -c '
+"$PYTHON" -u -c '
 import torch
 print("Python   :", __import__("sys").executable)
 print("PyTorch  :", torch.__version__)
@@ -99,13 +101,13 @@ print("GPU name :", torch.cuda.get_device_name(0) if torch.cuda.is_available() e
 # Preflight
 # ===============================
 
-$PYTHON scripts/preflight_evaluation.py --require-cuda
+"$PYTHON" scripts/preflight_evaluation.py --require-cuda
 
 
 # ===============================
 # Run project
 # ===============================
 
-$PYTHON main.py
+"$PYTHON" main.py
 
 echo "Done."

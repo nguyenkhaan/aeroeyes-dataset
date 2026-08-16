@@ -7,7 +7,7 @@ from typing import Union
 
 import pandas as pd
 
-from bounding_box_analysis import compare_stats as compare_distributions
+from .bounding_box_analysis import compare_stats as compare_distributions
 
 
 class DistributionLoader(ABC):

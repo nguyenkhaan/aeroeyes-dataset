@@ -15,7 +15,7 @@ import cv2
 from PIL import Image
 import re
 import sys
-from image_mauve import KLDivergence as mauveKL
+from .image_mauve import KLDivergence as mauveKL
 
 
 def convert_instance_seg_to_bbox(line):

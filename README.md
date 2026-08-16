@@ -6,7 +6,7 @@ SDQM.
 
 ## Requirements
 
-- NVIDIA GPU with at least 30 GB available VRAM
+- NVIDIA GPU with at least 32 GB available VRAM
 - Python 3.12 and the VPS `module` command
 - Hugging Face token with access to the configured models
 
@@ -18,8 +18,12 @@ clone them separately.
 ```bash
 git clone <repository-url> aeroeyes-dataset
 cd aeroeyes-dataset
-module load shared python312
-bash scripts/setup_vps.sh
+conda create --prefix venv/ python=3.12
+```
+
+Activate the environment: 
+```bash 
+conda activate venv/ 
 ```
 
 Set `HF_TOKEN` in `.env` once:
@@ -28,6 +32,22 @@ Set `HF_TOKEN` in `.env` once:
 nano .env
 ```
 
+### Install dependencies 
+```bash 
+
+python -m pip install -r requirements.txt
+python -m pip install -r cmmd-pytorch/requirements.txt
+python -m pip install -r requirements-sdqm.txt
+python -m pip install --no-deps --force-reinstall -e third_party/SDQM/dataset_interpretability/v_info/ultralytics
+mkdir -p logs data/input data/output data/real_reference data/gen_reference .cache
+```
+Check the important packages: 
+```bash 
+python -c "import torch; print('torch:', torch.__version__)"
+python -c "import ultralytics; print('ultralytics:', ultralytics.__file__)"
+```
+
+### Run code  
 ```bash 
 sbatch sbatch.slurm 
 ```

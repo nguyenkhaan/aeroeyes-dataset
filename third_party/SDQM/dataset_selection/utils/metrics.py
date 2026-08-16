@@ -4,7 +4,7 @@ import sys
 import numpy as np
 from mauve import compute_mauve
 
-from utils.alpha_precision_beta_recall_authenticity import compute_alpha_precision
+from .alpha_precision_beta_recall_authenticity import compute_alpha_precision
 
 # Get the directory two levels up
 parent_of_parent_dir = os.path.abspath(os.path.join(__file__, "../.."))
