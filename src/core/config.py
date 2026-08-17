@@ -46,6 +46,7 @@ MAX_NEW_TOKENS = 256
 NUM_INFERENCE_STEPS = 20 # 15
 GUIDANCE_SCALE = 3.5 # 3.5 
 BASE_SEED = 50
+EXPECTED_PYTORCH_CUDA = os.getenv("EXPECTED_PYTORCH_CUDA", "12.8")
 # ----------------------------------------------------------
 # Quality Evaluation (humaninstruction-ver2-8)
 # ----------------------------------------------------------

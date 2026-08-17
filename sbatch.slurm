@@ -53,6 +53,7 @@ export MPLCONFIGDIR="$CACHE_ROOT/matplotlib"
 
 export SDQM_ENABLED=true
 export SDQM_VINFO_ENABLED=false
+export EXPECTED_PYTORCH_CUDA=12.8
 
 
 # ===============================

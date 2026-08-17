@@ -19,11 +19,7 @@ clone them separately.
 git clone <repository-url> aeroeyes-dataset
 cd aeroeyes-dataset
 conda create --prefix venv/ python=3.12
-```
-
-Activate the environment: 
-```bash 
-conda activate venv/ 
+conda activate venv/
 ```
 
 Set `HF_TOKEN` in `.env` once:
@@ -32,19 +28,23 @@ Set `HF_TOKEN` in `.env` once:
 nano .env
 ```
 
-### Install dependencies 
-```bash 
+### Install dependencies
 
-python -m pip install -r requirements.txt
-python -m pip install -r cmmd-pytorch/requirements.txt
-python -m pip install -r requirements-sdqm.txt
-python -m pip install --no-deps --force-reinstall -e third_party/SDQM/dataset_interpretability/v_info/ultralytics
-mkdir -p logs data/input data/output data/real_reference data/gen_reference .cache
+Use the bootstrap script. It removes incompatible CUDA 13 packages, installs
+the official CUDA 12.8 PyTorch wheels, and verifies the installed Torch build
+before installing the remaining dependencies.
+
+```bash
+bash scripts/setup_vps.sh
 ```
-Check the important packages: 
+
+The Slurm environment uses CUDA 12.8, so do not install a `+cu130` PyTorch
+wheel. For a manual repair, run the bootstrap script with the same interpreter
+used by Slurm:
+
 ```bash 
-python -c "import torch; print('torch:', torch.__version__)"
-python -c "import ultralytics; print('ultralytics:', ultralytics.__file__)"
+VENV_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
+  bash scripts/setup_vps.sh
 ```
 
 ### Run code  

@@ -7,6 +7,7 @@ import torch
 
 from src.core.config import (
     CMMD_REPO_DIR,
+    EXPECTED_PYTORCH_CUDA,
     GEN_IMAGES_DIR,
     REAL_IMAGES_DIR,
     SDQM_MIN_IMAGES,
@@ -76,6 +77,18 @@ def collect_image_errors() -> list[str]:
     return errors
 
 
+def collect_cuda_errors() -> list[str]:
+    installed_cuda_version = torch.version.cuda
+    if installed_cuda_version != EXPECTED_PYTORCH_CUDA:
+        return [
+            "PyTorch CUDA build mismatch: "
+            f"expected {EXPECTED_PYTORCH_CUDA}, found {installed_cuda_version}."
+        ]
+    if not torch.cuda.is_available():
+        return ["CUDA is unavailable to the configured Python interpreter."]
+    return []
+
+
 def collect_preflight_errors(options: PreflightOptions) -> list[str]:
     errors = collect_path_errors(configured_evaluation_paths())
     if not errors:
@@ -84,8 +97,8 @@ def collect_preflight_errors(options: PreflightOptions) -> list[str]:
             errors.append(f"Custom Ultralytics check failed: {message}")
     if options.require_images:
         errors.extend(collect_image_errors())
-    if options.require_cuda and not torch.cuda.is_available():
-        errors.append("CUDA is unavailable to the configured Python interpreter.")
+    if options.require_cuda:
+        errors.extend(collect_cuda_errors())
     return errors
 
 
@@ -95,5 +108,6 @@ def preflight_summary() -> list[str]:
         f"Python CMMD path: {paths.cmmd_main}",
         f"Python SDQM path: {paths.sdqm_main}",
         f"YOLO data YAML: {paths.data_yaml}",
+        f"PyTorch CUDA build: {torch.version.cuda}",
         f"CUDA available: {torch.cuda.is_available()}",
     ]

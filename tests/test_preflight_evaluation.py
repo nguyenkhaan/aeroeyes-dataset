@@ -1,8 +1,14 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from src.evaluation.preflight import EvaluationPaths, collect_path_errors
+from src.evaluation.preflight import (
+    EvaluationPaths,
+    PreflightOptions,
+    collect_path_errors,
+    collect_preflight_errors,
+)
 
 
 class PreflightEvaluationTests(unittest.TestCase):
@@ -34,6 +40,23 @@ class PreflightEvaluationTests(unittest.TestCase):
         self.assertIn("CMMD", errors[0])
         self.assertIn("SDQM", errors[1])
         self.assertIn("YOLO data YAML", errors[2])
+
+    def test_requires_the_expected_pytorch_cuda_build(self) -> None:
+        with (
+            patch("src.evaluation.preflight.check_custom_ultralytics", return_value=(True, "")),
+            patch("src.evaluation.preflight.torch.cuda.is_available", return_value=True),
+            patch("src.evaluation.preflight.torch.version.cuda", "13.0"),
+        ):
+            with patch(
+                "src.evaluation.preflight.collect_path_errors",
+                return_value=[],
+            ):
+                errors = collect_preflight_errors(PreflightOptions(require_cuda=True))
+
+        self.assertEqual(
+            errors,
+            ["PyTorch CUDA build mismatch: expected 12.8, found 13.0."],
+        )
 
 
 if __name__ == "__main__":
