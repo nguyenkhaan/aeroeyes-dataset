@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 from src.core.config import CMMD_BATCH_SIZE, CMMD_MAX_COUNT, CMMD_REPO_DIR
+
+
+def _ensure_cmmd_import_path(repo_dir: str | Path) -> None:
+    repo_root = Path(repo_dir).resolve()
+    if not repo_root.is_dir():
+        return
+
+    path_text = str(repo_root)
+    if path_text not in sys.path:
+        sys.path.insert(0, path_text)
 
 
 def _load_compute_cmmd():
@@ -11,9 +22,10 @@ def _load_compute_cmmd():
     if not cmmd_main.is_file():
         raise FileNotFoundError(
             f"CMMD repo not found at {cmmd_main}. "
-            "Clone it with: git clone https://github.com/sayakpaul/cmmd-pytorch.git cmmd_pt"
+            "Clone it with: git clone https://github.com/sayakpaul/cmmd-pytorch.git cmmd-pytorch"
         )
 
+    _ensure_cmmd_import_path(CMMD_REPO_DIR)
     spec = importlib.util.spec_from_file_location(
         "cmmd_pytorch_main",
         cmmd_main,

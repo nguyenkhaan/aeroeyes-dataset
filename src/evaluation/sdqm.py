@@ -27,44 +27,22 @@ from src.core.config import (
 )
 from src.evaluation.sdqm_embedding import embed_image_directory, list_images
 from src.evaluation.sdqm_regression import append_sdqm_history_row, run_sdqm_regression
-from src.evaluation.sdqm_vinfo import check_custom_ultralytics, compute_vinfo_metrics
-from src.evaluation.yolo_export import export_yolo_pair
-
-SDQM_IMPORT_SUBDIRS = (
-    "dataset_selection",
-    "dataset_similarity",
-    "labels_and_characteristics",
-    "pixel_intensity",
-    "separability",
-    "spatial_distribution",
+from src.evaluation.sdqm_vinfo import (
+    check_custom_ultralytics,
+    compute_vinfo_metrics,
+    validate_vinfo_dataset,
 )
-SDQM_REPORT_FILENAME = "sdqm_report.json"
-
-
-def write_sdqm_status_report(
-    output_dir: str | Path,
-    status_report: dict[str, object],
-) -> Path:
-    report_dir = Path(output_dir)
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / SDQM_REPORT_FILENAME
-    report_path.write_text(
-        json.dumps(status_report, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    return report_path
+from src.evaluation.yolo_export import export_yolo_pair
 
 
 def _ensure_sdqm_import_paths(repo_dir: str | Path) -> None:
     repo_root = Path(repo_dir).resolve()
-    import_paths = [repo_root]
-    import_paths.extend(repo_root / subdir for subdir in SDQM_IMPORT_SUBDIRS)
+    if not repo_root.is_dir():
+        return
 
-    for import_path in import_paths:
-        if import_path.is_dir():
-            path_text = str(import_path)
-            if path_text not in sys.path:
-                sys.path.insert(0, path_text)
+    path_text = str(repo_root)
+    if path_text not in sys.path:
+        sys.path.insert(0, path_text)
 
 
 def _load_calculate_sdqm():
@@ -76,13 +54,27 @@ def _load_calculate_sdqm():
         )
 
     _ensure_sdqm_import_paths(SDQM_REPO_DIR)
+    ultralytics_ready, ultralytics_message = check_custom_ultralytics()
+    if not ultralytics_ready:
+        raise RuntimeError(
+            "SDQM requires the custom ultralytics fork before it can load: "
+            f"{ultralytics_message}"
+        )
 
     spec = importlib.util.spec_from_file_location("sdqm_main", sdqm_main)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load SDQM module from {sdqm_main}")
 
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except ModuleNotFoundError as exc:
+        missing_module = exc.name or "an SDQM dependency"
+        raise ModuleNotFoundError(
+            "SDQM dependency is missing: "
+            f"{missing_module}. Install SDQM dependencies with: "
+            "python -m pip install -r requirements-sdqm.txt"
+        ) from exc
     return module.calculate_sdqm
 
 
@@ -238,6 +230,8 @@ def compute_dataset_sdqm(
 
     use_yolo_export = SDQM_YOLO_EXPORT if export_yolo is None else export_yolo
     use_vinfo = SDQM_VINFO_ENABLED if include_vinfo is None else include_vinfo
+    if use_vinfo:
+        validate_vinfo_dataset(SDQM_VINFO_DATASET)
     real_yolo_root: Path | None = None
     synthetic_yolo_root: Path | None = None
 
@@ -305,7 +299,8 @@ def compute_dataset_sdqm(
                     )
                     flattened.update(vinfo_metrics)
                     vinfo_status = "completed"
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
+                    # V-Info is optional; upstream validator failures must not discard base SDQM metrics.
                     print(f"V-Info calculation failed: {exc}")
                     vinfo_status = f"failed: {exc}"
 

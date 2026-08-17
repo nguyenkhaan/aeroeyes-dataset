@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import os
 import shutil
@@ -25,6 +26,7 @@ VINFO_METRIC_KEYS = (
     "predictive_fusion",
     "v_info_fusion",
 )
+SUPPORTED_VINFO_DATASETS = frozenset({"rareplanes", "dimo", "wasabi"})
 
 
 def custom_ultralytics_path() -> Path:
@@ -36,23 +38,72 @@ def custom_ultralytics_path() -> Path:
     )
 
 
-def check_custom_ultralytics() -> tuple[bool, str]:
-    repo_ultralytics = custom_ultralytics_path()
-    if not repo_ultralytics.is_dir():
-        return (
-            False,
-            "Custom ultralytics not found. Clone SDQM and run: "
-            f"pip install -e {repo_ultralytics}",
+def validate_vinfo_dataset(dataset: str) -> str:
+    normalized_dataset = dataset.lower()
+    if normalized_dataset not in SUPPORTED_VINFO_DATASETS:
+        supported_datasets = ", ".join(sorted(SUPPORTED_VINFO_DATASETS))
+        raise ValueError(
+            f"Unsupported V-Info dataset '{dataset}'. "
+            f"Supported datasets: {supported_datasets}."
+        )
+    return normalized_dataset
+
+
+def _is_within_directory(path: Path, directory: Path) -> bool:
+    try:
+        path.resolve().relative_to(directory.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _remove_conflicting_ultralytics_modules() -> None:
+    for module_name in tuple(sys.modules):
+        if module_name == "ultralytics" or module_name.startswith("ultralytics."):
+            del sys.modules[module_name]
+
+
+def _load_custom_ultralytics():
+    repository_path = custom_ultralytics_path().resolve()
+    package_path = repository_path / "ultralytics"
+    validator_path = package_path / "models" / "yolo" / "detect" / "rareplanes_val.py"
+    if not validator_path.is_file():
+        raise FileNotFoundError(
+            "SDQM custom ultralytics is incomplete at "
+            f"{repository_path}. Expected {validator_path.name}."
         )
 
-    try:
-        import ultralytics  # noqa: F401
-    except ImportError:
-        return (
-            False,
-            "ultralytics is not installed. Run: "
-            f"pip install -e {repo_ultralytics}",
+    repository_text = str(repository_path)
+    if repository_text in sys.path:
+        sys.path.remove(repository_text)
+    sys.path.insert(0, repository_text)
+
+    loaded_module = sys.modules.get("ultralytics")
+    module_file = getattr(loaded_module, "__file__", None)
+    if module_file is not None and not _is_within_directory(
+        Path(module_file), repository_path
+    ):
+        _remove_conflicting_ultralytics_modules()
+
+    importlib.invalidate_caches()
+    module = importlib.import_module("ultralytics")
+    module_path = Path(module.__file__ or "")
+    if not _is_within_directory(module_path, repository_path):
+        raise ImportError(
+            "Python resolved ultralytics outside the SDQM fork: "
+            f"{module_path}. Reinstall the fork with: "
+            f"python -m pip install --force-reinstall -e {repository_path}"
         )
+
+    importlib.import_module("ultralytics.models.yolo.detect.rareplanes_val")
+    return module
+
+
+def check_custom_ultralytics() -> tuple[bool, str]:
+    try:
+        _load_custom_ultralytics()
+    except (FileNotFoundError, ImportError) as exc:
+        return False, str(exc)
 
     return True, "ok"
 
@@ -172,6 +223,7 @@ def compute_vinfo_metrics(
     is_ready, message = check_custom_ultralytics()
     if not is_ready:
         raise RuntimeError(message)
+    validated_dataset = validate_vinfo_dataset(dataset)
 
     vinfo_root = prepare_vinfo_yolo_layout(
         real_yolo_root=real_yolo_root,
@@ -184,7 +236,7 @@ def compute_vinfo_metrics(
     results = get_v_info(
         yaml_path,
         yaml_path,
-        dataset,
+        validated_dataset,
         image_size,
     )
 

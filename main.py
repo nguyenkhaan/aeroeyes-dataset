@@ -3,7 +3,6 @@ import os
 import re
 import traceback
 from io import BytesIO
-from pathlib import Path
 
 import pandas as pd
 import torch
@@ -23,7 +22,6 @@ from src.core.config import (
     REQUEST_TIMEOUT,
     SDQM_ENABLED,
     SDQM_MIN_IMAGES,
-    SDQM_OUTPUT_DIR,
     SDQM_VINFO_ENABLED,
     SDQM_YOLO_EXPORT,
     random_seed,
@@ -39,7 +37,6 @@ from src.evaluation import (
     evaluate_quality,
     load_evaluators,
     passes_quality_gate,
-    write_sdqm_status_report,
     write_metadata_jsonl,
 )
 from src.generation.flux import loading_model as loading_flux
@@ -142,45 +139,11 @@ def run_cmmd_report() -> float | None:
 
 
 def run_sdqm_report() -> dict[str, float] | None:
-    def write_status_report(
-        status: str,
-        reason: str,
-        image_counts: dict[str, int] | None = None,
-    ) -> None:
-        status_report: dict[str, object] = {
-            "status": status,
-            "reason": reason,
-        }
-        if image_counts:
-            status_report.update(image_counts)
-
-        try:
-            report_path = write_sdqm_status_report(
-                SDQM_OUTPUT_DIR,
-                status_report,
-            )
-            print(f"SDQM report: {report_path.resolve()}")
-        except OSError as exc:
-            print(f"Could not write SDQM report to {SDQM_OUTPUT_DIR}: {exc}")
-
     if not SDQM_ENABLED:
-        reason = "SDQM is disabled because SDQM_ENABLED=false."
-        print(reason)
-        write_status_report("disabled", reason)
+        print("SDQM disabled (SDQM_ENABLED=false).")
         return None
 
     if not os.path.isdir(REAL_IMAGES_DIR) or not os.path.isdir(GEN_IMAGES_DIR):
-        missing_dirs = [
-            directory
-            for directory in (REAL_IMAGES_DIR, GEN_IMAGES_DIR)
-            if not os.path.isdir(directory)
-        ]
-        reason = (
-            "Reference image directories are missing: "
-            + ", ".join(missing_dirs)
-        )
-        print(f"SDQM skipped: {reason}")
-        write_status_report("skipped", reason)
         return None
 
     real_images = [
@@ -193,17 +156,11 @@ def run_sdqm_report() -> dict[str, float] | None:
         for name in os.listdir(GEN_IMAGES_DIR)
         if name.lower().endswith((".jpg", ".jpeg", ".png"))
     ]
-    image_counts = {
-        "real_image_count": len(real_images),
-        "synthetic_image_count": len(gen_images),
-    }
     if len(real_images) < SDQM_MIN_IMAGES or len(gen_images) < SDQM_MIN_IMAGES:
-        reason = (
-            f"SDQM requires at least {SDQM_MIN_IMAGES} real and synthetic images. "
-            f"Found real={len(real_images)}, synthetic={len(gen_images)}."
+        print(
+            "SDQM skipped: need at least "
+            f"{SDQM_MIN_IMAGES} real and synthetic images."
         )
-        print(f"SDQM skipped: {reason}")
-        write_status_report("skipped", reason, image_counts)
         return None
 
     print("Computing SDQM metrics...")
@@ -224,19 +181,12 @@ def run_sdqm_report() -> dict[str, float] | None:
         print("SDQM metrics:")
         for metric_name, metric_value in sorted(sdqm_metrics.items()):
             print(f"  {metric_name}: {metric_value:.4f}")
-        print(f"SDQM report directory: {Path(SDQM_OUTPUT_DIR).resolve()}")
         return sdqm_metrics
     except FileNotFoundError as exc:
-        reason = f"SDQM setup incomplete: {exc}"
-        print(reason)
-        traceback.print_exc()
-        write_status_report("failed", reason, image_counts)
+        print(f"SDQM setup incomplete: {exc}")
         return None
     except Exception as exc:
-        reason = f"SDQM calculation failed: {exc}"
-        print(reason)
-        traceback.print_exc()
-        write_status_report("failed", reason, image_counts)
+        print(f"SDQM calculation failed: {exc}")
         return None
 
 
