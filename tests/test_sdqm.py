@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -8,6 +9,27 @@ from src.evaluation import sdqm
 
 
 class SdqmTests(unittest.TestCase):
+    def test_writes_failed_run_report_when_output_directory_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory) / "sdqm"
+
+            report_path = sdqm.write_sdqm_status_report(
+                output_dir,
+                {
+                    "status": "failed",
+                    "reason": "SDQM repo missing",
+                    "real_image_count": 2,
+                    "synthetic_image_count": 2,
+                },
+            )
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["reason"], "SDQM repo missing")
+        self.assertEqual(report["real_image_count"], 2)
+        self.assertEqual(report["synthetic_image_count"], 2)
+
     def test_checks_sdqm_repo_before_starting_yolo_export(self) -> None:
         image_paths = [Path("first.jpg"), Path("second.jpg")]
         with (

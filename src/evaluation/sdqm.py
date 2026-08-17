@@ -308,6 +308,7 @@ def compute_dataset_sdqm(
     regression_results = _maybe_run_regression(sdqm_dir, regression_csv)
 
     report = {
+        "status": "completed",
         "ref_dir": str(Path(ref_dir).resolve()),
         "eval_dir": str(Path(eval_dir).resolve()),
         "real_image_count": len(real_images),
@@ -324,7 +325,7 @@ def compute_dataset_sdqm(
         "summary_path": str(Path(SDQM_SUMMARY_PATH).resolve()),
     }
 
-    report_path = sdqm_dir / "sdqm_report.json"
+    report_path = sdqm_dir / SDQM_REPORT_FILENAME
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     write_sdqm_summary(report)
 
