@@ -7,11 +7,12 @@ from src.evaluation.quality import (
     passes_quality_gate,
 )
 from src.evaluation.cmmd import compute_dataset_cmmd
-from src.evaluation.sdqm import compute_dataset_sdqm, write_sdqm_status_report
+from src.evaluation.sdqm import compute_dataset_sdqm
 from src.evaluation.sdqm_metadata import attach_sdqm_metadata, write_metadata_jsonl
 from src.evaluation.sdqm_regression import run_sdqm_regression
 from src.evaluation.sdqm_vinfo import check_custom_ultralytics, compute_vinfo_metrics
 from src.evaluation.yolo_export import export_yolo_dataset, export_yolo_pair
+from src.evaluation.reporting import run_dataset_evaluation
 
 __all__ = [
     "QualityEvaluators",
@@ -28,6 +29,6 @@ __all__ = [
     "load_evaluators",
     "passes_quality_gate",
     "run_sdqm_regression",
+    "run_dataset_evaluation",
     "write_metadata_jsonl",
-    "write_sdqm_status_report",
 ]

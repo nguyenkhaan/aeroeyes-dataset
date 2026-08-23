@@ -29,7 +29,7 @@ GEN_IMAGES_DIR = os.getenv(
 )
 CMMD_REPO_DIR = os.getenv(
     "CMMD_REPO_DIR",
-    str(PROJECT_ROOT / "cmmd_pt"),
+    str(PROJECT_ROOT / "cmmd-pytorch"),
 )
 GENERAL_MODEL = "google/gemma-4-12B-it" 
 FLUX_REPO = "black-forest-labs/FLUX.2-klein-9B"
@@ -39,13 +39,14 @@ FLUX_MODEL = FLUX_REPO
 # Generation Parameters
 # ----------------------------------------------------------
 IMAGE_SIZE = 1024
-LIMIT_IMAGES = 5
+LIMIT_IMAGES = 1
 REQUEST_TIMEOUT = 30
 DOWNLOAD_RETRIES = 3
 MAX_NEW_TOKENS = 256
 NUM_INFERENCE_STEPS = 20 # 15
 GUIDANCE_SCALE = 3.5 # 3.5 
 BASE_SEED = 50
+EXPECTED_PYTORCH_CUDA = os.getenv("EXPECTED_PYTORCH_CUDA", "12.8")
 # ----------------------------------------------------------
 # Quality Evaluation (humaninstruction-ver2-8)
 # ----------------------------------------------------------
@@ -97,7 +98,7 @@ SDQM_METRIC_TYPES = [
     "label_overlap",
     "spatial",
 ]
-SDQM_VINFO_ENABLED = os.getenv("SDQM_VINFO_ENABLED", "true").lower() in (
+SDQM_VINFO_ENABLED = os.getenv("SDQM_VINFO_ENABLED", "false").lower() in (
     "1",
     "true",
     "yes",

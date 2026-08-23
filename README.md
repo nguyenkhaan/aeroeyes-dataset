@@ -1,76 +1,85 @@
 # Generating Rescue Images from Natural Disaster Images
 
-This project explores image generation for scientific research, with a focus on transforming natural disaster scenes into rescue-oriented images.
-
-## Technology Badges
-
-![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
-![Conda](https://img.shields.io/badge/Conda-Environment-44A833)
-![PyTorch](https://img.shields.io/badge/PyTorch-GPU%20Enabled-EE4C2C)
-![CUDA](https://img.shields.io/badge/CUDA-Required-76B900)
+This project transforms natural-disaster images into rescue-oriented images,
+then evaluates the generated dataset with per-image quality metrics, CMMD, and
+SDQM.
 
 ## Requirements
 
-- Python `>= 3.11`
-- NVIDIA GPU with `40 GB VRAM` or more
-- Conda installed on your machine
+- NVIDIA GPU with at least 32 GB available VRAM
+- Python 3.12 and the VPS `module` command
+- Hugging Face token with access to the configured models
 
-## Local Setup
+CMMD and SDQM source trees are already included in this repository. Do not
+clone them separately.
 
-### 1. Clone the repository
-
-```bash
-git clone <your-repository-url>
-cd ImageGeneration
-```
-
-### 2. Create a Conda environment
+## VPS setup
 
 ```bash
-conda create -n rescue-image python=3.11 -y
-conda activate rescue-image
+git clone <repository-url> aeroeyes-dataset
+cd aeroeyes-dataset
+conda create --prefix venv/ python=3.12
+conda activate venv/
 ```
 
-### 3. Install dependencies
+Set `HF_TOKEN` in `.env` once:
 
 ```bash
-pip install -r requirements.txt
+nano .env
 ```
-### 4. Create the data folder 
-- Create a data folder in the root. Including 2 subfolders: data/input and data/output 
-- We are using `incidents1M` for dataset. You can get here: https://github.com/ethanweber/IncidentsDataset. Thank you for authors. 
-### 5. Verify the installation
+
+### Install dependencies
+
+Use the bootstrap script. It removes incompatible CUDA 13 packages, installs
+the official CUDA 12.8 PyTorch wheels, and verifies the installed Torch build
+before installing the remaining dependencies.
 
 ```bash
-python main.py
+bash scripts/setup_vps.sh
 ```
 
-### SDQM setup (optional)
+The Slurm environment uses CUDA 12.8, so do not install a `+cu130` PyTorch
+wheel. For a manual repair, run the bootstrap script with the same interpreter
+used by Slurm:
 
-SDQM runs after the image-generation batch and requires its upstream repository
-and optional dependencies:
+```bash 
+VENV_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
+  bash scripts/setup_vps.sh
+```
+
+### Run code  
+```bash 
+sbatch sbatch.slurm 
+```
+## Preflight (optional for testing)
 
 ```bash
-git clone https://github.com/ayushzenith/SDQM.git third_party/SDQM
-pip install -r requirements-sdqm.txt
+export PYTHON="$PWD/venv/bin/python"
+export CACHE_ROOT="$PWD/.cache"
+"$PYTHON" scripts/preflight_evaluation.py --require-cuda
 ```
 
-Set `SDQM_MAP_VALUE` to the detector mAP for the current run when collecting
-SDQM-vs-mAP regression history. The dataset report is written to
-`reports/sdqm_summary.md` by default.
-
-### 6. Run on VPS with Slurm
+## Calculate reports for existing images
 
 ```bash
-sbatch sbatch.sh
+"$PYTHON" scripts/preflight_evaluation.py --require-cuda --require-images
+"$PYTHON" scripts/run_evaluation.py \
+  --real-dir data/real_reference \
+  --synthetic-dir data/gen_reference
 ```
 
-Run the batch command from the repository root so the relative log paths resolve correctly. If your virtual environment lives elsewhere, set `VENV_PATH` before submitting the job.
+## Generate images and reports with Slurm
 
-## Notes
+```bash
+sbatch --export=ALL,PYTHON="$PYTHON",CACHE_ROOT="$CACHE_ROOT" sbatch.slurm
+```
 
-- The project is designed for GPU execution.
-- For best performance, use an NVIDIA GPU that meets or exceeds the 40 GB VRAM requirement.
-- If your CUDA driver or toolkit differs from the environment used to build the dependencies, you may need to adjust the PyTorch and CUDA packages accordingly.
+Outputs:
 
-Build with Cloudian 💙 Cloud
+```text
+data/output/evaluation_report.csv
+data/output/evaluation_metadata.jsonl
+data/output/sdqm/sdqm_report.json
+data/output/sdqm/sdqm_values.csv
+reports/sdqm_summary.md
+```
