@@ -10,7 +10,7 @@ from PIL import Image
 from tqdm import tqdm
 from transformers import AutoImageProcessor, AutoModel
 
-from src.core.config import SDQM_EMBEDDING_MODEL
+from src.core.config import HUGGINGFACE_CACHE_DIR, SDQM_EMBEDDING_MODEL
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".tiff", ".webp"}
 
@@ -44,8 +44,14 @@ def embed_image_directory(
         raise ValueError(f"No images found in {image_dir}")
 
     eval_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    processor = AutoImageProcessor.from_pretrained(model_name)
-    model = AutoModel.from_pretrained(model_name).to(eval_device)
+    processor = AutoImageProcessor.from_pretrained(
+        model_name,
+        cache_dir=str(HUGGINGFACE_CACHE_DIR),
+    )
+    model = AutoModel.from_pretrained(
+        model_name,
+        cache_dir=str(HUGGINGFACE_CACHE_DIR),
+    ).to(eval_device)
     model.eval()
 
     embeddings: list[np.ndarray] = []

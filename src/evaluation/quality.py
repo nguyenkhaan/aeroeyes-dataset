@@ -12,6 +12,7 @@ from transformers import CLIPModel, CLIPProcessor
 
 from src.core.config import (
     CLIP_MODEL_ID,
+    HUGGINGFACE_CACHE_DIR,
     O_SCORE_THRESHOLD,
     SC_NORM_DIVISOR,
     SSIM_MAX_THRESHOLD,
@@ -31,8 +32,14 @@ def load_evaluators(device: str | None = None) -> QualityEvaluators:
     eval_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading evaluators on: {eval_device}...")
 
-    clip_model = CLIPModel.from_pretrained(CLIP_MODEL_ID).to(eval_device)
-    clip_processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID)
+    clip_model = CLIPModel.from_pretrained(
+        CLIP_MODEL_ID,
+        cache_dir=str(HUGGINGFACE_CACHE_DIR),
+    ).to(eval_device)
+    clip_processor = CLIPProcessor.from_pretrained(
+        CLIP_MODEL_ID,
+        cache_dir=str(HUGGINGFACE_CACHE_DIR),
+    )
     clip_iqa = pyiqa.create_metric("clipiqa", device=eval_device)
     pq_transform = transforms.Compose([transforms.ToTensor()])
 

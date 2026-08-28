@@ -2,7 +2,7 @@ import torch
 
 from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
 
-from src.core.config import FLUX_MODEL, HF_TOKEN
+from src.core.config import FLUX_MODEL, HF_TOKEN, HUGGINGFACE_CACHE_DIR
 
 
 def loading_model(
@@ -32,6 +32,7 @@ def loading_model(
 
     pipe = Flux2KleinPipeline.from_pretrained(
         model_id,
+        cache_dir=str(HUGGINGFACE_CACHE_DIR),
         torch_dtype=resolved_dtype,
         token=token or None,
     )

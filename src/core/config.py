@@ -9,6 +9,18 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
+MODEL_CACHE_ROOT = Path(os.getenv("MODEL_CACHE_ROOT", "/datastore/cndt_khanhnd/models"))
+HUGGINGFACE_CACHE_DIR = Path(os.getenv("HF_HOME", str(MODEL_CACHE_ROOT)))
+
+MODEL_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+HUGGINGFACE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+(HUGGINGFACE_CACHE_DIR / "hub").mkdir(parents=True, exist_ok=True)
+(HUGGINGFACE_CACHE_DIR / "transformers").mkdir(parents=True, exist_ok=True)
+
+os.environ.setdefault("HF_HOME", str(HUGGINGFACE_CACHE_DIR))
+os.environ.setdefault("HF_HUB_CACHE", str(HUGGINGFACE_CACHE_DIR / "hub"))
+os.environ.setdefault("TRANSFORMERS_CACHE", str(HUGGINGFACE_CACHE_DIR / "transformers"))
+
 # READ ENVIRONMENT 
 HF_TOKEN = os.getenv('HF_TOKEN')
 JSON_PATH = os.getenv(

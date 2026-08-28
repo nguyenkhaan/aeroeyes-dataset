@@ -12,6 +12,7 @@ from tqdm import tqdm
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
 from src.core.config import (
+    HUGGINGFACE_CACHE_DIR,
     SDQM_BOX_THRESHOLD,
     SDQM_GROUNDING_DINO_MODEL,
     SDQM_MODEL_TEXT,
@@ -89,9 +90,13 @@ class RescueDetector:
 
         eval_device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.device = eval_device
-        self._processor = AutoProcessor.from_pretrained(self.model_name)
+        self._processor = AutoProcessor.from_pretrained(
+            self.model_name,
+            cache_dir=str(HUGGINGFACE_CACHE_DIR),
+        )
         self._model = AutoModelForZeroShotObjectDetection.from_pretrained(
-            self.model_name
+            self.model_name,
+            cache_dir=str(HUGGINGFACE_CACHE_DIR),
         ).to(eval_device)
         self._model.eval()
 

@@ -1,5 +1,5 @@
 import torch
-from src.core.config import GENERAL_MODEL, HF_TOKEN
+from src.core.config import GENERAL_MODEL, HF_TOKEN, HUGGINGFACE_CACHE_DIR
 
 try:
     from transformers import AutoProcessor, AutoModelForImageTextToText
@@ -19,12 +19,14 @@ def loading_model(
 
     vision_model = AutoModelForImageTextToText.from_pretrained(
         model_id,
+        cache_dir=str(HUGGINGFACE_CACHE_DIR),
         dtype="auto",
         device_map=device_map,
         token=resolved_token,
     ).eval()
     vision_processor = AutoProcessor.from_pretrained(
         model_id,
+        cache_dir=str(HUGGINGFACE_CACHE_DIR),
         token=resolved_token,
     )
     return vision_model, vision_processor
