@@ -3,34 +3,39 @@ def build_flux_prompt(
     rescue_instruction: str,
 ) -> str:
     """
-    Build the final prompt for FLUX image editing.
+    Xây dựng prompt cuối cùng cho FLUX để chỉnh sửa ảnh.
     """
     prompt = f"""
-You are editing an existing disaster photograph.
+Bạn đang chỉnh sửa một bức ảnh thiên tai đã có sẵn.
 
-Original Scene
---------------
+1. Cảnh gốc
+----------------
 {scene_description}
-Editing Instructions
---------------------
+
+2. Hướng dẫn chỉnh sửa
+------------------------
 {rescue_instruction}
-Requirements
-    - Preserve the original disaster scene.
-    - Preserve all existing buildings, vehicles, roads and environmental objects.
-    - Do not change the disaster type.
-    - Add only realistic rescue operations.
-    - Blend newly added rescue personnel, vehicles and equipment naturally.
-    - Maintain realistic lighting, shadows and perspective.
-    - Maintain correct object proportions.
-    - Generate anatomically correct humans.
-    - Produce seamless image editing without visible artifacts.
-    Style
-    - Documentary disaster photography
-    - Photojournalism
-    - Real-world emergency response
-    - Natural color grading
-    - Authentic textures
-    - High realism
-    - Non-cinematic
+
+3. Yêu cầu bắt buộc
+--------------------
+- Giữ nguyên cảnh thiên tai gốc.
+- Giữ nguyên tất cả tòa nhà, phương tiện, đường giao thông và các vật thể môi trường hiện có.
+- Không thay đổi loại thiên tai.
+- Chỉ thêm các hoạt động cứu hộ có tính thực tế.
+- Trộn các nhân sự cứu hộ, phương tiện và thiết bị mới thêm vào một cách tự nhiên.
+- Giữ ánh sáng, bóng đổ và góc nhìn hợp lý với thực tế.
+- Giữ tỷ lệ vật thể chính xác.
+- Tạo hình người có cấu trúc cơ thể hợp lý và thực tế.
+- Không để xuất hiện artefact, vết cắt, thay đổi quá mức hoặc kết cấu không tự nhiên.
+
+4. Phong cách hình ảnh
+----------------------
+- Chụp ảnh tài liệu thiên tai
+- Nhiếp ảnh báo chí
+- Phản ánh ứng phó khẩn cấp trong thực tế
+- Chất lượng màu tự nhiên
+- Kết cấu thật
+- Độ chân thực cao
+- Không mang phong cách điện ảnh quá mức
 """
     return prompt.strip()
