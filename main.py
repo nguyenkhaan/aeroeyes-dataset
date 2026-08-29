@@ -24,6 +24,7 @@ from src.core.config import (
     SDQM_MIN_IMAGES,
     SDQM_VINFO_ENABLED,
     SDQM_YOLO_EXPORT,
+    WATERMARK_REMOVAL_ENABLED,
     random_seed,
 )
 from src.evaluation import (
@@ -49,6 +50,7 @@ from src.helper.image import (
 )
 from src.helper.loading_dataset import loading_dataset as load
 from src.helper.memory import cleanup
+from src.helper.watermark import remove_watermark, unload_watermark_tools
 from src.vision import build_flux_prompt
 from src.vision.rescue_instruction import generate_rescue_instruction
 from src.vision.scene_description import generate_scene_description
@@ -257,6 +259,12 @@ for img_key, img_info in data.items():
             skipped += 1
             continue
 
+        if WATERMARK_REMOVAL_ENABLED:
+            try:
+                original_image = remove_watermark(original_image)
+            except Exception as exc:
+                print(f"Watermark removal skipped: {exc}")
+
         original_image = resize_center_crop(original_image, IMAGE_SIZE)
 
         if torch.cuda.is_available():
@@ -392,6 +400,9 @@ print(f"Output    : {OUTPUT_DIR}")
 csv_path = export_evaluation_report(evaluation_records)
 if csv_path:
     print(f"CSV Report: {csv_path}")
+
+unload_watermark_tools()
+cleanup()
 
 run_cmmd_report()
 sdqm_metrics = run_sdqm_report()
