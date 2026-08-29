@@ -17,3 +17,18 @@
   `LONG_CLIP_ENABLED` (default `true`); `LONG_CLIP_MODEL_ID`,
   `LONG_CLIP_MAX_TOKENS` override the checkpoint and limit.
 - `requirements.txt`: `easyocr`, `simple-lama-inpainting`.
+
+### Fixed
+- SDQM crashed at the end of every run with `NameError: SDQM_REPORT_FILENAME`.
+  Commit 49a7ae6 ("fix: sqdm import file") rewrote the top of
+  `src/evaluation/sdqm.py` and dropped the `SDQM_REPORT_FILENAME` constant and
+  `write_sdqm_status_report()` added in ece94a0, but left the reference at the
+  bottom of `compute_dataset_sdqm()`. Both are restored.
+- SDQM produced zero metrics because the wrapper called upstream
+  `calculate_sdqm(..., dataset="N/A")`. Upstream only binds its internal
+  `detected_dataset` inside the `if dataset == "auto"` branch, so any other
+  value raised `UnboundLocalError` and the per-file `except` dropped every
+  metric. Now passes `dataset="auto"`.
+- `compute_dataset_sdqm()` now writes `sdqm_report.json` with
+  `status: "failed"` and the exception before re-raising, so a headless run
+  always leaves a diagnostic artifact.
