@@ -14,6 +14,7 @@ from src.core.config import (
     GEN_IMAGES_DIR,
     GUIDANCE_SCALE,
     HEADERS,
+    HUGGINGFACE_CACHE_DIR,
     IMAGE_SIZE,
     LIMIT_IMAGES,
     NUM_INFERENCE_STEPS,
@@ -190,9 +191,22 @@ def run_sdqm_report() -> dict[str, float] | None:
         return None
 
 
-vision_model, vision_processor = loading_gemma()
-pipe = loading_flux()
-evaluators: QualityEvaluators = load_evaluators()
+print("Using Hugging Face cache directory:", HUGGINGFACE_CACHE_DIR)
+print("HF_HOME:", os.environ.get("HF_HOME"))
+print("HF_HUB_CACHE:", os.environ.get("HF_HUB_CACHE"))
+print("TRANSFORMERS_CACHE:", os.environ.get("TRANSFORMERS_CACHE"))
+
+try:
+    vision_model, vision_processor = loading_gemma()
+    print("Gemma model loaded successfully.")
+    pipe = loading_flux()
+    print("FLUX model loaded successfully.")
+    evaluators: QualityEvaluators = load_evaluators()
+    print("Quality evaluators loaded successfully.")
+except Exception:
+    print("Model loading failed. Check cache path, network access, disk permissions, and GPU memory.")
+    traceback.print_exc()
+    raise
 
 count = 0
 skipped = 0

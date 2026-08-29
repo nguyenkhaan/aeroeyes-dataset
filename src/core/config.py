@@ -9,17 +9,24 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-MODEL_CACHE_ROOT = Path(os.getenv("MODEL_CACHE_ROOT", "/datastore/cndt_khanhnd/models"))
-HUGGINGFACE_CACHE_DIR = Path(os.getenv("HF_HOME", str(MODEL_CACHE_ROOT)))
+MODEL_CACHE_ROOT = Path(os.getenv("MODEL_CACHE_ROOT", "/datastore/cndt_khanhnd/models")).expanduser()
+HUGGINGFACE_CACHE_DIR = Path(os.getenv("HF_HOME", str(MODEL_CACHE_ROOT))).expanduser()
 
-MODEL_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
-HUGGINGFACE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-(HUGGINGFACE_CACHE_DIR / "hub").mkdir(parents=True, exist_ok=True)
-(HUGGINGFACE_CACHE_DIR / "transformers").mkdir(parents=True, exist_ok=True)
+# Force the cache to the configured datastore path so models are not downloaded into the home directory.
+try:
+    MODEL_CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+    HUGGINGFACE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    (HUGGINGFACE_CACHE_DIR / "hub").mkdir(parents=True, exist_ok=True)
+    (HUGGINGFACE_CACHE_DIR / "transformers").mkdir(parents=True, exist_ok=True)
+except OSError as exc:
+    raise RuntimeError(
+        f"Cannot create model cache directory. Please check /datastore mount and permissions. "
+        f"Target path: {HUGGINGFACE_CACHE_DIR}. Original error: {exc}"
+    ) from exc
 
-os.environ.setdefault("HF_HOME", str(HUGGINGFACE_CACHE_DIR))
-os.environ.setdefault("HF_HUB_CACHE", str(HUGGINGFACE_CACHE_DIR / "hub"))
-os.environ.setdefault("TRANSFORMERS_CACHE", str(HUGGINGFACE_CACHE_DIR / "transformers"))
+os.environ["HF_HOME"] = str(HUGGINGFACE_CACHE_DIR)
+os.environ["HF_HUB_CACHE"] = str(HUGGINGFACE_CACHE_DIR / "hub")
+os.environ["TRANSFORMERS_CACHE"] = str(HUGGINGFACE_CACHE_DIR / "transformers")
 
 # READ ENVIRONMENT 
 HF_TOKEN = os.getenv('HF_TOKEN')
