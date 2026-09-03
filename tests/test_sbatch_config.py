@@ -19,14 +19,21 @@ class SbatchConfigurationTests(unittest.TestCase):
         self.assertIn('"$PYTHON" scripts/preflight_evaluation.py --require-cuda', script)
         self.assertIn('"$PYTHON" main.py', script)
 
-    def test_sets_evaluation_paths_and_writable_caches(self) -> None:
+    def test_sets_evaluation_paths_and_shared_model_storage(self) -> None:
         script = Path("sbatch.slurm").read_text(encoding="utf-8")
 
         self.assertIn("export CMMD_REPO_DIR=", script)
         self.assertIn("export SDQM_REPO_DIR=", script)
+        self.assertIn(
+            "/datastore/cndt_khanhnd/models/aeroeyes_model",
+            script,
+        )
+        self.assertIn("export HF_HUB_CACHE=", script)
+        self.assertIn("export TORCH_HOME=", script)
         self.assertIn("export YOLO_CONFIG_DIR=", script)
         self.assertIn("export MPLCONFIGDIR=", script)
         self.assertIn("export SDQM_ENABLED=", script)
+        self.assertNotIn("aeroeyes-dataset/.cache", script)
         self.assertNotIn("SDQL_ENABLED", script)
 
 

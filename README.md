@@ -51,11 +51,26 @@ VENV_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
 ```bash 
 sbatch sbatch.slurm 
 ```
+
+## Model storage
+
+All downloaded model weights and model caches are stored below:
+
+```text
+/datastore/cndt_khanhnd/models/aeroeyes_model/
+├── huggingface/
+├── torch/
+└── ultralytics/
+```
+
+Existing files in this directory are reused automatically by later jobs. The
+project does not use its local `.cache` directory for model storage.
+
 ## Preflight (optional for testing)
 
 ```bash
 export PYTHON="$PWD/venv/bin/python"
-export CACHE_ROOT="$PWD/.cache"
+export AEROEYES_MODEL_DIR="/datastore/cndt_khanhnd/models/aeroeyes_model"
 "$PYTHON" scripts/preflight_evaluation.py --require-cuda
 ```
 
@@ -71,7 +86,7 @@ export CACHE_ROOT="$PWD/.cache"
 ## Generate images and reports with Slurm
 
 ```bash
-sbatch --export=ALL,PYTHON="$PYTHON",CACHE_ROOT="$CACHE_ROOT" sbatch.slurm
+sbatch --export=ALL,PYTHON="$PYTHON",AEROEYES_MODEL_DIR="$AEROEYES_MODEL_DIR" sbatch.slurm
 ```
 
 Outputs:

@@ -9,10 +9,12 @@ from src.core.config import (
     CMMD_REPO_DIR,
     EXPECTED_PYTORCH_CUDA,
     GEN_IMAGES_DIR,
+    MODEL_STORAGE_DIR,
     REAL_IMAGES_DIR,
     SDQM_MIN_IMAGES,
     SDQM_REPO_DIR,
     SDQM_YOLO_DATA_YAML,
+    ensure_model_storage,
 )
 from src.evaluation.sdqm_embedding import IMAGE_EXTENSIONS
 from src.evaluation.sdqm_vinfo import check_custom_ultralytics
@@ -89,8 +91,17 @@ def collect_cuda_errors() -> list[str]:
     return []
 
 
+def collect_model_storage_errors() -> list[str]:
+    try:
+        ensure_model_storage()
+    except OSError as exc:
+        return [f"Model storage is not writable: {MODEL_STORAGE_DIR} ({exc})"]
+    return []
+
+
 def collect_preflight_errors(options: PreflightOptions) -> list[str]:
-    errors = collect_path_errors(configured_evaluation_paths())
+    errors = collect_model_storage_errors()
+    errors.extend(collect_path_errors(configured_evaluation_paths()))
     if not errors:
         is_ready, message = check_custom_ultralytics()
         if not is_ready:
@@ -108,6 +119,7 @@ def preflight_summary() -> list[str]:
         f"Python CMMD path: {paths.cmmd_main}",
         f"Python SDQM path: {paths.sdqm_main}",
         f"YOLO data YAML: {paths.data_yaml}",
+        f"Model storage: {MODEL_STORAGE_DIR}",
         f"PyTorch CUDA build: {torch.version.cuda}",
         f"CUDA available: {torch.cuda.is_available()}",
     ]

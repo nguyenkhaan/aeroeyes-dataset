@@ -1,10 +1,24 @@
-from diffusers import DiffusionPipeline
-from concurrent.futures import ThreadPoolExecutor
-import pandas as pd
 import argparse
-import torch
 import os
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
+MODEL_STORAGE_DIR = Path(
+    os.getenv(
+        "AEROEYES_MODEL_DIR",
+        "/datastore/cndt_khanhnd/models/aeroeyes_model",
+    )
+)
+HF_HOME = MODEL_STORAGE_DIR / "huggingface"
+HF_HUB_CACHE = MODEL_STORAGE_DIR / "huggingface" / "hub"
+os.environ["HF_HOME"] = str(HF_HOME)
+os.environ["HF_HUB_CACHE"] = str(HF_HUB_CACHE)
+os.environ["HF_ASSETS_CACHE"] = str(HF_HOME / "assets")
+os.environ["HF_XET_CACHE"] = str(HF_HOME / "xet")
+
+import pandas as pd
+import torch
+from diffusers import DiffusionPipeline
 
 ALL_CKPTS = [
     "runwayml/stable-diffusion-v1-5",
@@ -24,12 +38,20 @@ def load_dataframe():
 
 
 def load_pipeline(args):
+    HF_HUB_CACHE.mkdir(parents=True, exist_ok=True)
     if "runway" in args.pipeline_id:
         pipeline = DiffusionPipeline.from_pretrained(
-            args.pipeline_id, torch_dtype=torch.float16, safety_checker=None
+            args.pipeline_id,
+            torch_dtype=torch.float16,
+            safety_checker=None,
+            cache_dir=str(HF_HUB_CACHE),
         ).to("cuda")
     else:
-        pipeline = DiffusionPipeline.from_pretrained(args.pipeline_id, torch_dtype=torch.float16).to("cuda")
+        pipeline = DiffusionPipeline.from_pretrained(
+            args.pipeline_id,
+            torch_dtype=torch.float16,
+            cache_dir=str(HF_HUB_CACHE),
+        ).to("cuda")
     pipeline.set_progress_bar_config(disable=True)
     return pipeline
 

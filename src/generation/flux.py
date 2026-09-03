@@ -1,8 +1,8 @@
 import torch
 
-from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
+from src.core.config import FLUX_MODEL, HF_HUB_CACHE, HF_TOKEN, ensure_model_storage
 
-from src.core.config import FLUX_MODEL, HF_TOKEN
+from diffusers.pipelines.flux2.pipeline_flux2_klein import Flux2KleinPipeline
 
 
 def loading_model(
@@ -11,6 +11,7 @@ def loading_model(
     device: str | None = None,
     torch_dtype: torch.dtype | None = None,
 ):
+    ensure_model_storage()
 
     resolved_device = device or (
         "cuda" if torch.cuda.is_available() else "cpu"
@@ -34,6 +35,7 @@ def loading_model(
         model_id,
         torch_dtype=resolved_dtype,
         token=token or None,
+        cache_dir=str(HF_HUB_CACHE),
     )
 
     pipe.to(resolved_device)

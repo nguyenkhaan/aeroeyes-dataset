@@ -13,6 +13,7 @@ from src.core.config import (
     SDQM_REPO_DIR,
     SDQM_VINFO_DATASET,
     SDQM_YOLO_DATA_YAML,
+    ensure_model_storage,
 )
 
 VINFO_METRIC_KEYS = (
@@ -220,6 +221,7 @@ def compute_vinfo_metrics(
 
     Requires the customized ultralytics package from the SDQM repo.
     """
+    ensure_model_storage()
     is_ready, message = check_custom_ultralytics()
     if not is_ready:
         raise RuntimeError(message)

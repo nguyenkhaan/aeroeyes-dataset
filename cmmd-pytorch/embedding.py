@@ -15,9 +15,25 @@
 
 """Embedding models used in the CMMD calculation."""
 
-from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
-import torch
+import os
+from pathlib import Path
+
+_MODEL_STORAGE_DIR = Path(
+    os.getenv(
+        "AEROEYES_MODEL_DIR",
+        "/datastore/cndt_khanhnd/models/aeroeyes_model",
+    )
+)
+_HF_HOME = _MODEL_STORAGE_DIR / "huggingface"
+_HF_HUB_CACHE = _MODEL_STORAGE_DIR / "huggingface" / "hub"
+os.environ["HF_HOME"] = str(_HF_HOME)
+os.environ["HF_HUB_CACHE"] = str(_HF_HUB_CACHE)
+os.environ["HF_ASSETS_CACHE"] = str(_HF_HOME / "assets")
+os.environ["HF_XET_CACHE"] = str(_HF_HOME / "xet")
+
 import numpy as np
+import torch
+from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
 _CLIP_MODEL_NAME = "openai/clip-vit-large-patch14-336"
 _CUDA_AVAILABLE = torch.cuda.is_available()
@@ -34,9 +50,16 @@ class ClipEmbeddingModel:
     """CLIP image embedding calculator."""
 
     def __init__(self):
-        self.image_processor = CLIPImageProcessor.from_pretrained(_CLIP_MODEL_NAME)
+        _HF_HUB_CACHE.mkdir(parents=True, exist_ok=True)
+        self.image_processor = CLIPImageProcessor.from_pretrained(
+            _CLIP_MODEL_NAME,
+            cache_dir=str(_HF_HUB_CACHE),
+        )
 
-        self._model = CLIPVisionModelWithProjection.from_pretrained(_CLIP_MODEL_NAME).eval()
+        self._model = CLIPVisionModelWithProjection.from_pretrained(
+            _CLIP_MODEL_NAME,
+            cache_dir=str(_HF_HUB_CACHE),
+        ).eval()
         if _CUDA_AVAILABLE:
             self._model = self._model.cuda()
 

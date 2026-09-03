@@ -3,14 +3,14 @@ from __future__ import annotations
 import pickle
 from pathlib import Path
 
+from src.core.config import HF_HUB_CACHE, SDQM_EMBEDDING_MODEL, ensure_model_storage
+
 import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
 from tqdm import tqdm
 from transformers import AutoImageProcessor, AutoModel
-
-from src.core.config import SDQM_EMBEDDING_MODEL
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".tiff", ".webp"}
 
@@ -43,9 +43,16 @@ def embed_image_directory(
     if not image_paths:
         raise ValueError(f"No images found in {image_dir}")
 
+    ensure_model_storage()
     eval_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    processor = AutoImageProcessor.from_pretrained(model_name)
-    model = AutoModel.from_pretrained(model_name).to(eval_device)
+    processor = AutoImageProcessor.from_pretrained(
+        model_name,
+        cache_dir=str(HF_HUB_CACHE),
+    )
+    model = AutoModel.from_pretrained(
+        model_name,
+        cache_dir=str(HF_HUB_CACHE),
+    ).to(eval_device)
     model.eval()
 
     embeddings: list[np.ndarray] = []

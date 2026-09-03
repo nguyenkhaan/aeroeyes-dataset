@@ -5,19 +5,22 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from src.core.config import (
+    HF_HUB_CACHE,
+    SDQM_BOX_THRESHOLD,
+    SDQM_GROUNDING_DINO_MODEL,
+    SDQM_MODEL_TEXT,
+    SDQM_TEXT_THRESHOLD,
+    SDQM_YOLO_DATA_YAML,
+    ensure_model_storage,
+)
+
 import torch
 import yaml
 from PIL import Image
 from tqdm import tqdm
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
-from src.core.config import (
-    SDQM_BOX_THRESHOLD,
-    SDQM_GROUNDING_DINO_MODEL,
-    SDQM_MODEL_TEXT,
-    SDQM_TEXT_THRESHOLD,
-    SDQM_YOLO_DATA_YAML,
-)
 from src.evaluation.sdqm_embedding import list_images
 
 
@@ -87,11 +90,16 @@ class RescueDetector:
         if self._model is not None:
             return
 
+        ensure_model_storage()
         eval_device = self.device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.device = eval_device
-        self._processor = AutoProcessor.from_pretrained(self.model_name)
+        self._processor = AutoProcessor.from_pretrained(
+            self.model_name,
+            cache_dir=str(HF_HUB_CACHE),
+        )
         self._model = AutoModelForZeroShotObjectDetection.from_pretrained(
-            self.model_name
+            self.model_name,
+            cache_dir=str(HF_HUB_CACHE),
         ).to(eval_device)
         self._model.eval()
 

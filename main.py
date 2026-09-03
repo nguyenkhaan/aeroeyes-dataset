@@ -22,6 +22,7 @@ from src.core.config import (
     REQUEST_TIMEOUT,
     SDQM_ENABLED,
     SDQM_MIN_IMAGES,
+    SDQM_OUTPUT_DIR,
     SDQM_VINFO_ENABLED,
     SDQM_YOLO_EXPORT,
     random_seed,
@@ -37,6 +38,7 @@ from src.evaluation import (
     evaluate_quality,
     load_evaluators,
     passes_quality_gate,
+    write_sdqm_status_report,
     write_metadata_jsonl,
 )
 from src.generation.flux import loading_model as loading_flux
@@ -138,6 +140,26 @@ def run_cmmd_report() -> float | None:
         return None
 
 
+def write_sdqm_failure_report(
+    reason: str,
+    real_image_count: int,
+    synthetic_image_count: int,
+) -> None:
+    try:
+        report_path = write_sdqm_status_report(
+            SDQM_OUTPUT_DIR,
+            {
+                "status": "failed",
+                "reason": reason,
+                "real_image_count": real_image_count,
+                "synthetic_image_count": synthetic_image_count,
+            },
+        )
+        print(f"SDQM failure report: {report_path.resolve()}")
+    except OSError as exc:
+        print(f"Could not write SDQM failure report: {exc}")
+
+
 def run_sdqm_report() -> dict[str, float] | None:
     if not SDQM_ENABLED:
         print("SDQM disabled (SDQM_ENABLED=false).")
@@ -183,10 +205,14 @@ def run_sdqm_report() -> dict[str, float] | None:
             print(f"  {metric_name}: {metric_value:.4f}")
         return sdqm_metrics
     except FileNotFoundError as exc:
-        print(f"SDQM setup incomplete: {exc}")
+        reason = f"SDQM setup incomplete: {exc}"
+        print(reason)
+        write_sdqm_failure_report(reason, len(real_images), len(gen_images))
         return None
     except Exception as exc:
-        print(f"SDQM calculation failed: {exc}")
+        reason = f"SDQM calculation failed: {exc}"
+        print(reason)
+        write_sdqm_failure_report(reason, len(real_images), len(gen_images))
         return None
 
 

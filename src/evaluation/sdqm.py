@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import importlib.util
 import json
 import sys
@@ -33,6 +34,22 @@ from src.evaluation.sdqm_vinfo import (
     validate_vinfo_dataset,
 )
 from src.evaluation.yolo_export import export_yolo_pair
+
+SDQM_REPORT_FILENAME = "sdqm_report.json"
+
+
+def write_sdqm_status_report(
+    output_dir: str | Path,
+    status_report: dict[str, object],
+) -> Path:
+    report_dir = Path(output_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / SDQM_REPORT_FILENAME
+    report_path.write_text(
+        json.dumps(status_report, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return report_path
 
 
 def _ensure_sdqm_import_paths(repo_dir: str | Path) -> None:
@@ -85,6 +102,19 @@ def _flatten_metric_values(metric_values: list[dict]) -> dict[str, float]:
             if isinstance(value, (int, float)):
                 flattened[key] = float(value)
     return flattened
+
+
+def _write_metric_values_csv(
+    output_path: str | Path,
+    metric_values: dict[str, float],
+) -> Path:
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=metric_values)
+        writer.writeheader()
+        writer.writerow(metric_values)
+    return destination
 
 
 def _resolve_image_size(image_dir: str | Path) -> tuple[int, int]:
@@ -273,11 +303,15 @@ def compute_dataset_sdqm(
         image_size=image_size,
         output=str(sdqm_dir / "sdqm_values.csv"),
         metric_type=selected_metrics,
-        dataset="N/A",
+        dataset="auto",
         temp_dir=str(sdqm_dir / "vinfo_temp"),
     )
 
     flattened = _flatten_metric_values(metric_values)
+    if not flattened:
+        raise RuntimeError(
+            "SDQM returned no numeric metrics. Review the preceding metric errors."
+        )
     vinfo_status = "skipped"
 
     if use_vinfo:
@@ -304,6 +338,7 @@ def compute_dataset_sdqm(
                     print(f"V-Info calculation failed: {exc}")
                     vinfo_status = f"failed: {exc}"
 
+    _write_metric_values_csv(sdqm_dir / "sdqm_values.csv", flattened)
     _maybe_append_history(flattened, sdqm_dir)
     regression_results = _maybe_run_regression(sdqm_dir, regression_csv)
 
@@ -325,8 +360,7 @@ def compute_dataset_sdqm(
         "summary_path": str(Path(SDQM_SUMMARY_PATH).resolve()),
     }
 
-    report_path = sdqm_dir / SDQM_REPORT_FILENAME
-    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    write_sdqm_status_report(sdqm_dir, report)
     write_sdqm_summary(report)
 
     return flattened

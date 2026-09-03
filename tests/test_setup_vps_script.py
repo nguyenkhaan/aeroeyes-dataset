@@ -46,6 +46,11 @@ class VpsSetupScriptTests(unittest.TestCase):
         script = Path("scripts/setup_vps.sh").read_text(encoding="utf-8")
 
         self.assertIn('mkdir -p "$ROOT_DIR/logs"', script)
+        self.assertIn(
+            "/datastore/cndt_khanhnd/models/aeroeyes_model",
+            script,
+        )
+        self.assertNotIn('"$ROOT_DIR/.cache"', script)
         self.assertIn('if [[ ! -f "$ROOT_DIR/.env" ]]', script)
         self.assertIn('cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"', script)
 

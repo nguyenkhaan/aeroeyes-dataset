@@ -1,5 +1,10 @@
 import torch
-from src.core.config import GENERAL_MODEL, HF_TOKEN
+from src.core.config import (
+    GENERAL_MODEL,
+    HF_HUB_CACHE,
+    HF_TOKEN,
+    ensure_model_storage,
+)
 
 try:
     from transformers import AutoProcessor, AutoModelForImageTextToText
@@ -12,6 +17,7 @@ def loading_model(
     device_map: str = "auto",
     torch_dtype: torch.dtype | None = None,
 ):
+    ensure_model_storage()
     resolved_dtype = torch_dtype or (
         torch.bfloat16 if torch.cuda.is_available() else torch.float32
     )
@@ -22,9 +28,11 @@ def loading_model(
         dtype="auto",
         device_map=device_map,
         token=resolved_token,
+        cache_dir=str(HF_HUB_CACHE),
     ).eval()
     vision_processor = AutoProcessor.from_pretrained(
         model_id,
         token=resolved_token,
+        cache_dir=str(HF_HUB_CACHE),
     )
     return vision_model, vision_processor

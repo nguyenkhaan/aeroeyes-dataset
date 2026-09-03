@@ -8,8 +8,63 @@ import random
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_MODEL_STORAGE_DIR = Path(
+    "/datastore/cndt_khanhnd/models/aeroeyes_model"
+)
+MODEL_STORAGE_DIR = Path(
+    os.getenv("AEROEYES_MODEL_DIR", str(DEFAULT_MODEL_STORAGE_DIR))
+).expanduser()
+HF_HOME = MODEL_STORAGE_DIR / "huggingface"
+HF_HUB_CACHE = HF_HOME / "hub"
+HF_ASSETS_CACHE = HF_HOME / "assets"
+HF_XET_CACHE = HF_HOME / "xet"
+TORCH_HOME = MODEL_STORAGE_DIR / "torch"
+XDG_CACHE_HOME = MODEL_STORAGE_DIR / "xdg"
+ULTRALYTICS_DIR = MODEL_STORAGE_DIR / "ultralytics"
+ULTRALYTICS_WEIGHTS_DIR = ULTRALYTICS_DIR / "weights"
+ULTRALYTICS_RUNS_DIR = ULTRALYTICS_DIR / "runs"
+YOLO_CONFIG_DIR = ULTRALYTICS_DIR / "config"
+SDQM_VINFO_MODEL_PATH = ULTRALYTICS_WEIGHTS_DIR / "yolo11n.pt"
+MPLCONFIGDIR = MODEL_STORAGE_DIR / "matplotlib"
 
-# READ ENVIRONMENT 
+MODEL_STORAGE_DIRECTORIES = (
+    MODEL_STORAGE_DIR,
+    HF_HUB_CACHE,
+    HF_ASSETS_CACHE,
+    HF_XET_CACHE,
+    TORCH_HOME,
+    XDG_CACHE_HOME,
+    ULTRALYTICS_WEIGHTS_DIR,
+    ULTRALYTICS_RUNS_DIR,
+    YOLO_CONFIG_DIR,
+    MPLCONFIGDIR,
+)
+
+MODEL_CACHE_ENVIRONMENT = {
+    "AEROEYES_MODEL_DIR": MODEL_STORAGE_DIR,
+    "HF_HOME": HF_HOME,
+    "HF_HUB_CACHE": HF_HUB_CACHE,
+    "HF_ASSETS_CACHE": HF_ASSETS_CACHE,
+    "HF_XET_CACHE": HF_XET_CACHE,
+    "TORCH_HOME": TORCH_HOME,
+    "XDG_CACHE_HOME": XDG_CACHE_HOME,
+    "YOLO_CONFIG_DIR": YOLO_CONFIG_DIR,
+    "YOLO_WEIGHTS_DIR": ULTRALYTICS_WEIGHTS_DIR,
+    "YOLO_RUNS_DIR": ULTRALYTICS_RUNS_DIR,
+    "SDQM_VINFO_MODEL_PATH": SDQM_VINFO_MODEL_PATH,
+    "MPLCONFIGDIR": MPLCONFIGDIR,
+}
+
+for environment_name, directory in MODEL_CACHE_ENVIRONMENT.items():
+    os.environ[environment_name] = str(directory)
+
+
+def ensure_model_storage() -> None:
+    for directory in MODEL_STORAGE_DIRECTORIES:
+        directory.mkdir(parents=True, exist_ok=True)
+
+
+# READ ENVIRONMENT
 HF_TOKEN = os.getenv('HF_TOKEN')
 JSON_PATH = os.getenv(
     "JSON_PATH",

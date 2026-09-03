@@ -40,16 +40,28 @@ fi
 export CMMD_REPO_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/cmmd-pytorch
 export SDQM_REPO_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/third_party/SDQM
 
-CACHE_ROOT=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/.cache
+export AEROEYES_MODEL_DIR="${AEROEYES_MODEL_DIR:-/datastore/cndt_khanhnd/models/aeroeyes_model}"
+export HF_HOME="$AEROEYES_MODEL_DIR/huggingface"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export HF_ASSETS_CACHE="$HF_HOME/assets"
+export HF_XET_CACHE="$HF_HOME/xet"
+export TORCH_HOME="$AEROEYES_MODEL_DIR/torch"
+export XDG_CACHE_HOME="$AEROEYES_MODEL_DIR/xdg"
+export YOLO_CONFIG_DIR="$AEROEYES_MODEL_DIR/ultralytics/config"
+export YOLO_WEIGHTS_DIR="$AEROEYES_MODEL_DIR/ultralytics/weights"
+export YOLO_RUNS_DIR="$AEROEYES_MODEL_DIR/ultralytics/runs"
+export SDQM_VINFO_MODEL_PATH="$YOLO_WEIGHTS_DIR/yolo11n.pt"
+export MPLCONFIGDIR="$AEROEYES_MODEL_DIR/matplotlib"
 
-mkdir -p "$CACHE_ROOT/huggingface" \
-         "$CACHE_ROOT/ultralytics" \
-         "$CACHE_ROOT/matplotlib"
-
-export XDG_CACHE_HOME="$CACHE_ROOT"
-export HF_HOME="$CACHE_ROOT/huggingface"
-export YOLO_CONFIG_DIR="$CACHE_ROOT/ultralytics"
-export MPLCONFIGDIR="$CACHE_ROOT/matplotlib"
+mkdir -p "$HF_HUB_CACHE" \
+         "$HF_ASSETS_CACHE" \
+         "$HF_XET_CACHE" \
+         "$TORCH_HOME" \
+         "$XDG_CACHE_HOME" \
+         "$YOLO_CONFIG_DIR" \
+         "$YOLO_WEIGHTS_DIR" \
+         "$YOLO_RUNS_DIR" \
+         "$MPLCONFIGDIR"
 
 export SDQM_ENABLED=true
 export SDQM_VINFO_ENABLED=false

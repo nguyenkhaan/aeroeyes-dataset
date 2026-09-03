@@ -1,3 +1,4 @@
+import csv
 import json
 import sys
 import tempfile
@@ -112,6 +113,92 @@ class SdqmTests(unittest.TestCase):
 
         self.assertIn("| similarity | 0.1250 |", summary)
         self.assertIn("- V-Info: skipped", summary)
+
+    def test_uses_auto_dataset_and_writes_numeric_metrics_csv(self) -> None:
+        upstream_arguments = {}
+
+        def calculate_sdqm(**kwargs):
+            upstream_arguments.update(kwargs)
+            return [{"Dataset Similarity_mauve": 0.75}]
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(
+                sdqm,
+                "list_images",
+                side_effect=[
+                    [Path("real-1.jpg"), Path("real-2.jpg")],
+                    [Path("synthetic-1.jpg"), Path("synthetic-2.jpg")],
+                ],
+            ),
+            patch.object(
+                sdqm,
+                "_load_calculate_sdqm",
+                return_value=calculate_sdqm,
+            ),
+            patch.object(
+                sdqm,
+                "export_yolo_pair",
+                return_value=(Path("real-yolo"), Path("synthetic-yolo")),
+            ),
+            patch.object(sdqm, "embed_image_directory"),
+            patch.object(sdqm, "_resolve_image_size", return_value=(512, 512)),
+            patch.object(sdqm, "_maybe_append_history"),
+            patch.object(sdqm, "_maybe_run_regression", return_value=None),
+            patch.object(
+                sdqm,
+                "SDQM_SUMMARY_PATH",
+                str(Path(directory) / "sdqm_summary.md"),
+            ),
+        ):
+            output_dir = Path(directory) / "sdqm"
+            metrics = sdqm.compute_dataset_sdqm(
+                "real",
+                "synthetic",
+                output_dir=str(output_dir),
+                export_yolo=True,
+                include_vinfo=False,
+            )
+            with (output_dir / "sdqm_values.csv").open(
+                newline="",
+                encoding="utf-8",
+            ) as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(upstream_arguments["dataset"], "auto")
+        self.assertEqual(metrics, {"Dataset Similarity_mauve": 0.75})
+        self.assertEqual(rows, [{"Dataset Similarity_mauve": "0.75"}])
+
+    def test_rejects_empty_upstream_metrics_before_writing_history(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(
+                sdqm,
+                "list_images",
+                side_effect=[
+                    [Path("real-1.jpg"), Path("real-2.jpg")],
+                    [Path("synthetic-1.jpg"), Path("synthetic-2.jpg")],
+                ],
+            ),
+            patch.object(
+                sdqm,
+                "_load_calculate_sdqm",
+                return_value=lambda **kwargs: [],
+            ),
+            patch.object(sdqm, "embed_image_directory"),
+            patch.object(sdqm, "_resolve_image_size", return_value=(512, 512)),
+            patch.object(sdqm, "_maybe_append_history") as append_history,
+            self.assertRaisesRegex(RuntimeError, "no numeric metrics"),
+        ):
+            sdqm.compute_dataset_sdqm(
+                "real",
+                "synthetic",
+                output_dir=str(Path(directory) / "sdqm"),
+                export_yolo=False,
+                include_vinfo=False,
+            )
+
+        append_history.assert_not_called()
 
 
 if __name__ == "__main__":

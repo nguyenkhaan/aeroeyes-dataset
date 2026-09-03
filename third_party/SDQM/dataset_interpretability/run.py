@@ -1,8 +1,34 @@
-from ultralytics import YOLO
-from scipy.stats import entropy
 import argparse
+import os
 import time
+from pathlib import Path
+
 import numpy as np
+from scipy.stats import entropy
+
+MODEL_STORAGE_DIR = Path(
+    os.getenv(
+        "AEROEYES_MODEL_DIR",
+        "/datastore/cndt_khanhnd/models/aeroeyes_model",
+    )
+)
+ULTRALYTICS_DIR = MODEL_STORAGE_DIR / "ultralytics"
+YOLO_CONFIG_DIR = ULTRALYTICS_DIR / "config"
+YOLO_MODEL_PATH = Path(
+    os.getenv(
+        "SDQM_VINFO_MODEL_PATH",
+        str(ULTRALYTICS_DIR / "weights" / "yolo11n.pt"),
+    )
+)
+YOLO_RUNS_DIR = Path(
+    os.getenv("YOLO_RUNS_DIR", str(ULTRALYTICS_DIR / "runs"))
+)
+YOLO_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+os.environ["YOLO_CONFIG_DIR"] = str(YOLO_CONFIG_DIR)
+os.environ["YOLO_WEIGHTS_DIR"] = str(YOLO_MODEL_PATH.parent)
+os.environ["YOLO_RUNS_DIR"] = str(YOLO_RUNS_DIR)
+
+from ultralytics import YOLO
 from ultralytics.models.yolo.detect.rareplanes_val import RareplanesDetectionValidator
 from ultralytics.models.yolo.detect.dimo_val import DIMODetectionValidator
 from ultralytics.models.yolo.detect.wasabi_val import WASABIDetectionValidator
@@ -13,11 +39,27 @@ from ultralytics.models.yolo.detect.wasabi_val import WASABIDetectionValidator
 # Annotation file can be the same. Just two inputs incase they aren't
 
 def get_v_info(train_annotation_file, validation_annotation_file, dataset="rareplanes", image_size=512):
+    YOLO_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    YOLO_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+
     # Load the YOLO model
-    model = YOLO("yolo11n.pt")
-    results = model.train(data=train_annotation_file, epochs=10, freeze=10, device=0, imgsz=image_size)
-    
-    args = dict(model="yolo11n.pt", data=validation_annotation_file, device=0, imgsz=image_size)
+    model = YOLO(str(YOLO_MODEL_PATH))
+    results = model.train(
+        data=train_annotation_file,
+        epochs=10,
+        freeze=10,
+        device=0,
+        imgsz=image_size,
+        project=str(YOLO_RUNS_DIR),
+    )
+
+    args = dict(
+        model=str(YOLO_MODEL_PATH),
+        data=validation_annotation_file,
+        device=0,
+        imgsz=image_size,
+        project=str(YOLO_RUNS_DIR),
+    )
     
     if dataset == "rareplanes":
         results2 = RareplanesDetectionValidator(args=args)
@@ -29,8 +71,13 @@ def get_v_info(train_annotation_file, validation_annotation_file, dataset="rarep
         results2 = WASABIDetectionValidator(args=args)
         results2()
     else:
-        model2 = YOLO("yolo11n.pt")
-        results2 = model2.val(data=validation_annotation_file, device=0, imgsz=image_size)
+        model2 = YOLO(str(YOLO_MODEL_PATH))
+        results2 = model2.val(
+            data=validation_annotation_file,
+            device=0,
+            imgsz=image_size,
+            project=str(YOLO_RUNS_DIR),
+        )
     
     # Calculate the entropy of the validation set
     conditional_iou = -1 * calculate_entropy(results.iou_stores)
@@ -91,4 +138,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    

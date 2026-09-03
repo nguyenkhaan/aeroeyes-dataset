@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.core.config import (
+    CLIP_MODEL_ID,
+    HF_HUB_CACHE,
+    O_SCORE_THRESHOLD,
+    SC_NORM_DIVISOR,
+    SSIM_MAX_THRESHOLD,
+    ensure_model_storage,
+)
+
 import numpy as np
 import pyiqa
 import torch
@@ -9,14 +18,6 @@ from PIL import Image
 from skimage.metrics import structural_similarity as _ssim
 from torchvision import transforms
 from transformers import CLIPModel, CLIPProcessor
-
-from src.core.config import (
-    CLIP_MODEL_ID,
-    O_SCORE_THRESHOLD,
-    SC_NORM_DIVISOR,
-    SSIM_MAX_THRESHOLD,
-)
-
 
 @dataclass
 class QualityEvaluators:
@@ -28,11 +29,18 @@ class QualityEvaluators:
 
 
 def load_evaluators(device: str | None = None) -> QualityEvaluators:
+    ensure_model_storage()
     eval_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading evaluators on: {eval_device}...")
 
-    clip_model = CLIPModel.from_pretrained(CLIP_MODEL_ID).to(eval_device)
-    clip_processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID)
+    clip_model = CLIPModel.from_pretrained(
+        CLIP_MODEL_ID,
+        cache_dir=str(HF_HUB_CACHE),
+    ).to(eval_device)
+    clip_processor = CLIPProcessor.from_pretrained(
+        CLIP_MODEL_ID,
+        cache_dir=str(HF_HUB_CACHE),
+    )
     clip_iqa = pyiqa.create_metric("clipiqa", device=eval_device)
     pq_transform = transforms.Compose([transforms.ToTensor()])
 

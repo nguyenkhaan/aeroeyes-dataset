@@ -6,6 +6,7 @@ BOOTSTRAP_PYTHON="${BOOTSTRAP_PYTHON:-python}"
 VENV_DIR="${VENV_DIR:-$ROOT_DIR/venv}"
 VENV_PYTHON="$VENV_DIR/bin/python"
 EXPECTED_PYTORCH_CUDA="${EXPECTED_PYTORCH_CUDA:-12.8}"
+MODEL_STORAGE_DIR="${AEROEYES_MODEL_DIR:-/datastore/cndt_khanhnd/models/aeroeyes_model}"
 INCOMPATIBLE_CUDA_PACKAGES=(
   cuda-bindings
   cuda-pathfinder
@@ -71,7 +72,16 @@ print(f"PyTorch {torch.__version__} compiled for CUDA {torch.version.cuda}.")
 PY
 
 mkdir -p "$ROOT_DIR/logs" "$ROOT_DIR/data/input" "$ROOT_DIR/data/output" \
-  "$ROOT_DIR/data/real_reference" "$ROOT_DIR/data/gen_reference" "$ROOT_DIR/.cache"
+  "$ROOT_DIR/data/real_reference" "$ROOT_DIR/data/gen_reference" \
+  "$MODEL_STORAGE_DIR/huggingface/hub" \
+  "$MODEL_STORAGE_DIR/huggingface/assets" \
+  "$MODEL_STORAGE_DIR/huggingface/xet" \
+  "$MODEL_STORAGE_DIR/torch" \
+  "$MODEL_STORAGE_DIR/xdg" \
+  "$MODEL_STORAGE_DIR/ultralytics/config" \
+  "$MODEL_STORAGE_DIR/ultralytics/weights" \
+  "$MODEL_STORAGE_DIR/ultralytics/runs" \
+  "$MODEL_STORAGE_DIR/matplotlib"
 
 if [[ ! -f "$ROOT_DIR/.env" ]]; then
   cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
@@ -79,3 +89,4 @@ fi
 
 echo "VPS setup complete. Set HF_TOKEN in $ROOT_DIR/.env before submitting a job."
 echo "Use this interpreter: $VENV_PYTHON"
+echo "Model storage: $MODEL_STORAGE_DIR"

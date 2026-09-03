@@ -62,13 +62,20 @@ def append_sdqm_history_row(
     history_csv: str | Path,
     row: Mapping[str, float | str | int],
 ) -> Path:
+    if not row:
+        raise ValueError("SDQM history requires at least one metric.")
+
     history_path = Path(history_csv)
     history_path.parent.mkdir(parents=True, exist_ok=True)
 
     new_row = pd.DataFrame([row])
     if history_path.is_file():
-        history_df = pd.read_csv(history_path)
-        history_df = pd.concat([history_df, new_row], ignore_index=True)
+        try:
+            history_df = pd.read_csv(history_path)
+        except pd.errors.EmptyDataError:
+            history_df = new_row
+        else:
+            history_df = pd.concat([history_df, new_row], ignore_index=True)
     else:
         history_df = new_row
 
@@ -91,7 +98,10 @@ def run_sdqm_regression(
     if not history_path.is_file():
         return None
 
-    history_df = pd.read_csv(history_path)
+    try:
+        history_df = pd.read_csv(history_path)
+    except pd.errors.EmptyDataError:
+        return None
     if len(history_df) < SDQM_MIN_REGRESSION_ROWS:
         return None
 
