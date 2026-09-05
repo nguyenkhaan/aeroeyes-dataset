@@ -13,34 +13,16 @@ set -euo pipefail
 
 export PYTHONUNBUFFERED=1
 export PYTHONFAULTHANDLER=1
-JOB_TIMEOUT_SECONDS=${JOB_TIMEOUT_SECONDS:-82800}
-STARTUP_TIMEOUT_SECONDS=${STARTUP_TIMEOUT_SECONDS:-120}
-PREFLIGHT_TIMEOUT_SECONDS=${PREFLIGHT_TIMEOUT_SECONDS:-300}
-for duration in "$JOB_TIMEOUT_SECONDS" "$STARTUP_TIMEOUT_SECONDS" "$PREFLIGHT_TIMEOUT_SECONDS"; do
-    if [[ ! "$duration" =~ ^[1-9][0-9]{0,5}$ ]]; then
-        echo "Timeouts must be positive integer seconds (at most 999999)." >&2
-        exit 2
-    fi
-done
-JOB_DEADLINE=$((SECONDS + JOB_TIMEOUT_SECONDS))
 
-run_timed() {
-    local name=$1 duration=$2 status remaining
-    shift 2
-    remaining=$((JOB_DEADLINE - SECONDS))
-    if (( remaining <= 0 )); then
-        echo "Job runtime budget exhausted before $name" >&2
-        return 124
-    fi
-    if (( duration > remaining )); then
-        duration=$remaining
-    fi
-    echo "[$(date -Is)] START $name (timeout=${duration}s)" >&2
-    if timeout --verbose --kill-after=10s "${duration}s" "$@"; then
+run_step() {
+    local name=$1 status
+    shift
+    echo "[$(date -Is)] START $name" >&2
+    if "$@"; then
         echo "[$(date -Is)] END $name" >&2
     else
         status=$?
-        echo "[$(date -Is)] FAILED $name (exit=$status; 124/137 indicates timeout or forced kill)" >&2
+        echo "[$(date -Is)] FAILED $name (exit=$status)" >&2
         return "$status"
     fi
 }
@@ -108,7 +90,7 @@ export EXPECTED_PYTORCH_CUDA=12.8
 
 REQUIRED_VRAM=30720
 
-if CHECK_OUT=$(run_timed "GPU selection" "$STARTUP_TIMEOUT_SECONDS" \
+if CHECK_OUT=$(run_step "GPU selection" \
     "${GPU_CHECK_SCRIPT:-/usr/local/bin/gpu_check.sh}" "$REQUIRED_VRAM" "$SLURM_JOB_ID"); then
     EXIT_CODE=0
 else
@@ -148,7 +130,7 @@ echo "Job: $SLURM_JOB_ID | Node: $SLURMD_NODENAME | GPU: $CUDA_VISIBLE_DEVICES |
 # Check Python / PyTorch / CUDA
 # ===============================
 
-run_timed "CUDA probe" "$STARTUP_TIMEOUT_SECONDS" "$PYTHON" -u -c '
+run_step "CUDA probe" "$PYTHON" -u -c '
 import torch
 print("Python   :", __import__("sys").executable)
 print("PyTorch  :", torch.__version__)
@@ -170,13 +152,13 @@ print("CUDA probe passed.", flush=True)
 # Preflight
 # ===============================
 
-run_timed "Preflight" "$PREFLIGHT_TIMEOUT_SECONDS" "$PYTHON" scripts/preflight_evaluation.py --require-cuda
+run_step "Preflight" "$PYTHON" scripts/preflight_evaluation.py --require-cuda
 
 
 # ===============================
 # Run project
 # ===============================
 
-run_timed "Pipeline" "$JOB_TIMEOUT_SECONDS" "$PYTHON" main.py
+run_step "Pipeline" "$PYTHON" main.py
 
 echo "Done."

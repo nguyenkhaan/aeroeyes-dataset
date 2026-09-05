@@ -55,16 +55,19 @@ sbatch sbatch.slurm
 
 ## Runtime limits and hang diagnostics
 
-The default Slurm allocation is **24 hours**. The script uses GNU `timeout`
-for GPU selection, a CUDA allocation/synchronization probe, preflight, and the
-Python pipeline. A timed-out command receives TERM, followed by KILL after
-10 seconds if necessary. Python logs are unbuffered.
+The default Slurm allocation is **24 hours**, controlled by `#SBATCH --time`.
+The batch script runs GPU selection, the CUDA allocation/synchronization probe,
+preflight, and the pipeline without shell timeouts. Slow CUDA initialization
+can finish without being killed after 120 seconds. Each step logs
+`START`, `END`, or `FAILED`; command failures stop the job. Python logs are
+unbuffered. A stuck CUDA probe can wait until Slurm ends the allocation.
+
+The former `JOB_TIMEOUT_SECONDS`, `STARTUP_TIMEOUT_SECONDS`, and
+`PREFLIGHT_TIMEOUT_SECONDS` variables are no longer used by the batch script.
+The Python pipeline retains its own limits:
 
 | Environment variable | Default | Meaning |
 |---|---:|---|
-| `JOB_TIMEOUT_SECONDS` | 82800 | Shared command budget from script startup (23 hours) |
-| `STARTUP_TIMEOUT_SECONDS` | 120 | Each GPU selection/CUDA probe |
-| `PREFLIGHT_TIMEOUT_SECONDS` | 300 | Evaluation prerequisite checks |
 | `LIMIT_IMAGES` | 1 | Newly accepted images per run |
 | `MAX_ATTEMPTS` | 10 | Images attempted, including download failures and quality rejections |
 | `MAX_CONSECUTIVE_ERRORS` | 3 | Consecutive processing errors before stopping |
@@ -73,10 +76,8 @@ Python pipeline. A timed-out command receives TERM, followed by KILL after
 | `STAGE_TIMEOUT_SECONDS` | 900 | Each Gemma, FLUX, quality, or cleanup stage |
 | `EVALUATION_TIMEOUT_SECONDS` | 3600 | Each CMMD/SDQM report stage |
 
-All limits must be positive integer seconds/counts. Export shell timeout
-settings before submission; Python settings can also be placed in `.env`.
-If changing Slurm's `--time`, keep `JOB_TIMEOUT_SECONDS` below the allocation
-with room for termination. It is not automatically derived from Slurm.
+All Python limits must be positive integer seconds/counts and can be placed
+in `.env`. Change Slurm's `--time` to adjust the overall job allocation.
 
 Each download has a 120-second total watchdog in addition to request retries.
 Python stages log `START`, `END` or `FAILED` with elapsed time. A stuck stage

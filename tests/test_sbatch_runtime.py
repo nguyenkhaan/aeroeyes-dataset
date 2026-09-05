@@ -18,14 +18,14 @@ class SbatchRuntimeTests(unittest.TestCase):
                 '  main.py) step=pipeline ;;\n'
                 '  *) exit 99 ;;\n'
                 'esac\n'
-                'if [ "${IGNORE_TERM:-}" = 1 ]; then trap "" TERM; fi\n'
-                'if [ "${HANG_STEP:-}" = "$step" ]; then sleep 30; fi\n'
+                'if [ "${SLOW_STEP:-}" = "$step" ]; then sleep 3; fi\n'
                 'echo "ran $step"\n'
+                'if [ "${FAIL_STEP:-}" = "$step" ]; then exit 42; fi\n'
             )
             gpu_check = root / "gpu_check.sh"
             gpu_check.write_text(
                 '#!/bin/bash\n'
-                'if [ "${HANG_STEP:-}" = gpu ]; then sleep 30; fi\n'
+                'if [ "${SLOW_STEP:-}" = gpu ]; then sleep 3; fi\n'
                 'echo "${GPU_RESULT:-3}"\n'
                 'exit "${GPU_EXIT:-0}"\n'
             )
@@ -59,27 +59,31 @@ class SbatchRuntimeTests(unittest.TestCase):
                 self.assertEqual(result.returncode, expected, result.stderr)
                 self.assertNotIn("ran cuda", result.stdout)
 
-    def test_hung_commands_exit_with_stage_name(self):
-        for step, label in [("gpu", "GPU selection"), ("cuda", "CUDA probe"),
-                            ("preflight", "Preflight"), ("pipeline", "Pipeline")]:
+    def test_slow_commands_finish_without_shell_timeouts(self):
+        for step in ["gpu", "cuda", "preflight", "pipeline"]:
             with self.subTest(step=step):
-                result = self.run_job({"HANG_STEP": step})
-                self.assertEqual(result.returncode, 124, result.stderr)
+                result = self.run_job({"SLOW_STEP": step})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("Done.", result.stdout)
+
+    def test_invalid_gpu_index_fails_before_pipeline(self):
+        result = self.run_job({"GPU_RESULT": "bad output"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("ran pipeline", result.stdout)
+
+    def test_command_errors_stop_job_with_stage_name(self):
+        for step, label, next_step in [
+            ("cuda", "CUDA probe", "preflight"),
+            ("preflight", "Preflight", "pipeline"),
+            ("pipeline", "Pipeline", None),
+        ]:
+            with self.subTest(step=step):
+                result = self.run_job({"FAIL_STEP": step})
+                self.assertEqual(result.returncode, 42, result.stderr)
                 self.assertIn(f"FAILED {label}", result.stderr)
                 self.assertNotIn("Done.", result.stdout)
-
-    def test_invalid_timeout_or_gpu_index_fails_before_pipeline(self):
-        for override in [{"JOB_TIMEOUT_SECONDS": "0"}, {"GPU_RESULT": "bad output"}]:
-            with self.subTest(override=override):
-                result = self.run_job(override)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn("ran pipeline", result.stdout)
-
-    def test_unresponsive_process_is_killed_after_termination_grace(self):
-        result = self.run_job({"HANG_STEP": "cuda", "IGNORE_TERM": "1"})
-        self.assertEqual(result.returncode, 137, result.stderr)
-        self.assertIn("FAILED CUDA probe", result.stderr)
-        self.assertNotIn("ran preflight", result.stdout)
+                if next_step:
+                    self.assertNotIn(f"ran {next_step}", result.stdout)
 
 
 if __name__ == "__main__":
