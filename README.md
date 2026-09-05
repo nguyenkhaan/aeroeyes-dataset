@@ -49,7 +49,71 @@ VENV_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
 
 ### Run code  
 ```bash 
+mkdir -p logs
 sbatch sbatch.slurm 
+```
+
+## Runtime limits and hang diagnostics
+
+The default Slurm allocation is **24 hours**. The script uses GNU `timeout`
+for GPU selection, a CUDA allocation/synchronization probe, preflight, and the
+Python pipeline. A timed-out command receives TERM, followed by KILL after
+10 seconds if necessary. Python logs are unbuffered.
+
+| Environment variable | Default | Meaning |
+|---|---:|---|
+| `JOB_TIMEOUT_SECONDS` | 82800 | Shared command budget from script startup (23 hours) |
+| `STARTUP_TIMEOUT_SECONDS` | 120 | Each GPU selection/CUDA probe |
+| `PREFLIGHT_TIMEOUT_SECONDS` | 300 | Evaluation prerequisite checks |
+| `LIMIT_IMAGES` | 1 | Newly accepted images per run |
+| `MAX_ATTEMPTS` | 10 | Images attempted, including download failures and quality rejections |
+| `MAX_CONSECUTIVE_ERRORS` | 3 | Consecutive processing errors before stopping |
+| `GENERATION_TIMEOUT_SECONDS` | 3600 | Stop starting new images after this time, excluding model loading |
+| `MODEL_LOAD_TIMEOUT_SECONDS` | 1800 | Each model-loading stage |
+| `STAGE_TIMEOUT_SECONDS` | 900 | Each Gemma, FLUX, quality, or cleanup stage |
+| `EVALUATION_TIMEOUT_SECONDS` | 3600 | Each CMMD/SDQM report stage |
+
+All limits must be positive integer seconds/counts. Export shell timeout
+settings before submission; Python settings can also be placed in `.env`.
+If changing Slurm's `--time`, keep `JOB_TIMEOUT_SECONDS` below the allocation
+with room for termination. It is not automatically derived from Slurm.
+
+Each download has a 120-second total watchdog in addition to request retries.
+Python stages log `START`, `END` or `FAILED` with elapsed time. A stuck stage
+dumps thread tracebacks to `.err` and immediately exits with code 1 using
+[Python's faulthandler watchdog](https://docs.python.org/3/library/faulthandler.html#dumping-the-tracebacks-after-a-timeout).
+This is a hard stop: the current image and unfinished aggregate reports may
+not be saved. Previously completed image/metadata files remain on disk.
+These process limits cannot repair a GPU driver or kernel stuck in
+uninterruptible I/O; that requires the cluster administrator.
+
+Existing output images and ineligible records do not consume attempts.
+A quality rejection or successfully saved image resets the error streak.
+If the target is not reached because of limits or dataset exhaustion,
+the pipeline writes available reports, skips CMMD/SDQM, and exits with code 2.
+After successful generation it releases generation models before bounded
+dataset evaluation. Shell timeout exits are normally 124, or 137 after KILL.
+
+For a small diagnostic run:
+
+```bash
+mkdir -p logs
+sbatch --export=ALL,LIMIT_IMAGES=1,MAX_ATTEMPTS=10,MAX_CONSECUTIVE_ERRORS=3 sbatch.slurm
+```
+
+Use the same job ID for `logs/job_<id>.out` and `logs/job_<id>.err`. The last
+`START` without an `END`/`FAILED`, together with the traceback, identifies the
+stage to investigate. Increase a stage budget only after confirming that it
+is making progress (first-time model downloads may need a larger budget).
+MPS allocation and GPU mapping remain cluster-specific; the script does not
+change the requested `--gres` resource or restart the MPS server.
+
+CPU-only guard checks (no model downloads):
+
+```bash
+python3 -m unittest discover -s tests -p 'test_sbatch*.py'
+python3 -m unittest discover -s tests -p test_runtime.py
+python3 -m unittest discover -s tests -p test_pipeline_limits.py
 ```
 
 ## Model storage

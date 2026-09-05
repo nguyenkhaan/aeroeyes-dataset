@@ -11,6 +11,40 @@
 
 set -euo pipefail
 
+export PYTHONUNBUFFERED=1
+export PYTHONFAULTHANDLER=1
+JOB_TIMEOUT_SECONDS=${JOB_TIMEOUT_SECONDS:-82800}
+STARTUP_TIMEOUT_SECONDS=${STARTUP_TIMEOUT_SECONDS:-120}
+PREFLIGHT_TIMEOUT_SECONDS=${PREFLIGHT_TIMEOUT_SECONDS:-300}
+for duration in "$JOB_TIMEOUT_SECONDS" "$STARTUP_TIMEOUT_SECONDS" "$PREFLIGHT_TIMEOUT_SECONDS"; do
+    if [[ ! "$duration" =~ ^[1-9][0-9]{0,5}$ ]]; then
+        echo "Timeouts must be positive integer seconds (at most 999999)." >&2
+        exit 2
+    fi
+done
+JOB_DEADLINE=$((SECONDS + JOB_TIMEOUT_SECONDS))
+
+run_timed() {
+    local name=$1 duration=$2 status remaining
+    shift 2
+    remaining=$((JOB_DEADLINE - SECONDS))
+    if (( remaining <= 0 )); then
+        echo "Job runtime budget exhausted before $name" >&2
+        return 124
+    fi
+    if (( duration > remaining )); then
+        duration=$remaining
+    fi
+    echo "[$(date -Is)] START $name (timeout=${duration}s)" >&2
+    if timeout --verbose --kill-after=10s "${duration}s" "$@"; then
+        echo "[$(date -Is)] END $name" >&2
+    else
+        status=$?
+        echo "[$(date -Is)] FAILED $name (exit=$status; 124/137 indicates timeout or forced kill)" >&2
+        return "$status"
+    fi
+}
+
 # ===============================
 # Load environment
 # ===============================
@@ -25,7 +59,7 @@ module load shared python312
 # Python environment
 # ===============================
 
-PYTHON=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv/bin/python
+PYTHON=${PYTHON:-/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv/bin/python}
 
 if [ ! -x "$PYTHON" ]; then
     echo "Configured Python is not executable: $PYTHON" >&2
@@ -74,8 +108,12 @@ export EXPECTED_PYTORCH_CUDA=12.8
 
 REQUIRED_VRAM=30720
 
-CHECK_OUT=$(/usr/local/bin/gpu_check.sh $REQUIRED_VRAM $SLURM_JOB_ID)
-EXIT_CODE=$?
+if CHECK_OUT=$(run_timed "GPU selection" "$STARTUP_TIMEOUT_SECONDS" \
+    "${GPU_CHECK_SCRIPT:-/usr/local/bin/gpu_check.sh}" "$REQUIRED_VRAM" "$SLURM_JOB_ID"); then
+    EXIT_CODE=0
+else
+    EXIT_CODE=$?
+fi
 
 if [ $EXIT_CODE -eq 10 ]; then
     echo "$CHECK_OUT"
@@ -87,7 +125,17 @@ if [ $EXIT_CODE -eq 11 ]; then
     exit 1
 fi
 
-if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
+if [ "$EXIT_CODE" -ne 0 ]; then
+    echo "$CHECK_OUT" >&2
+    exit "$EXIT_CODE"
+fi
+
+if [[ ! "$CHECK_OUT" =~ ^[0-9]+$ ]]; then
+    echo "GPU check did not return a numeric GPU index: $CHECK_OUT" >&2
+    exit 1
+fi
+
+if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
     export CUDA_VISIBLE_DEVICES=$CHECK_OUT
 fi
 
@@ -100,13 +148,21 @@ echo "Job: $SLURM_JOB_ID | Node: $SLURMD_NODENAME | GPU: $CUDA_VISIBLE_DEVICES |
 # Check Python / PyTorch / CUDA
 # ===============================
 
-"$PYTHON" -u -c '
+run_timed "CUDA probe" "$STARTUP_TIMEOUT_SECONDS" "$PYTHON" -u -c '
 import torch
 print("Python   :", __import__("sys").executable)
 print("PyTorch  :", torch.__version__)
-print("CUDA     :", torch.cuda.is_available())
+print("Checking CUDA availability...", flush=True)
+available = torch.cuda.is_available()
+print("CUDA     :", available)
+if not available:
+    raise SystemExit("CUDA unavailable; stopping before model loading")
 print("GPU count:", torch.cuda.device_count())
-print("GPU name :", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "N/A")
+print("GPU name :", torch.cuda.get_device_name(0))
+print("Checking CUDA allocation and synchronization...", flush=True)
+torch.empty(1, device="cuda")
+torch.cuda.synchronize()
+print("CUDA probe passed.", flush=True)
 '
 
 
@@ -114,13 +170,13 @@ print("GPU name :", torch.cuda.get_device_name(0) if torch.cuda.is_available() e
 # Preflight
 # ===============================
 
-"$PYTHON" scripts/preflight_evaluation.py --require-cuda
+run_timed "Preflight" "$PREFLIGHT_TIMEOUT_SECONDS" "$PYTHON" scripts/preflight_evaluation.py --require-cuda
 
 
 # ===============================
 # Run project
 # ===============================
 
-"$PYTHON" main.py
+run_timed "Pipeline" "$JOB_TIMEOUT_SECONDS" "$PYTHON" main.py
 
 echo "Done."

@@ -94,7 +94,20 @@ FLUX_MODEL = FLUX_REPO
 # Generation Parameters
 # ----------------------------------------------------------
 IMAGE_SIZE = 1024
-LIMIT_IMAGES = 1
+LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "1"))
+MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "10"))
+MAX_CONSECUTIVE_ERRORS = int(os.getenv("MAX_CONSECUTIVE_ERRORS", "3"))
+GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT_SECONDS", "3600"))
+MODEL_LOAD_TIMEOUT_SECONDS = int(os.getenv("MODEL_LOAD_TIMEOUT_SECONDS", "1800"))
+STAGE_TIMEOUT_SECONDS = int(os.getenv("STAGE_TIMEOUT_SECONDS", "900"))
+EVALUATION_TIMEOUT_SECONDS = int(os.getenv("EVALUATION_TIMEOUT_SECONDS", "3600"))
+for limit_name in (
+    "LIMIT_IMAGES", "MAX_ATTEMPTS", "MAX_CONSECUTIVE_ERRORS",
+    "GENERATION_TIMEOUT_SECONDS", "MODEL_LOAD_TIMEOUT_SECONDS",
+    "STAGE_TIMEOUT_SECONDS", "EVALUATION_TIMEOUT_SECONDS",
+):
+    if globals()[limit_name] <= 0:
+        raise ValueError(f"{limit_name} must be positive")
 REQUEST_TIMEOUT = 30
 DOWNLOAD_RETRIES = 3
 MAX_NEW_TOKENS = 256

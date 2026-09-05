@@ -3,6 +3,7 @@ import os
 import re
 import traceback
 from io import BytesIO
+from time import monotonic
 
 import pandas as pd
 import torch
@@ -16,6 +17,12 @@ from src.core.config import (
     HEADERS,
     IMAGE_SIZE,
     LIMIT_IMAGES,
+    MAX_ATTEMPTS,
+    MAX_CONSECUTIVE_ERRORS,
+    GENERATION_TIMEOUT_SECONDS,
+    MODEL_LOAD_TIMEOUT_SECONDS,
+    STAGE_TIMEOUT_SECONDS,
+    EVALUATION_TIMEOUT_SECONDS,
     NUM_INFERENCE_STEPS,
     OUTPUT_DIR,
     REAL_IMAGES_DIR,
@@ -51,6 +58,7 @@ from src.helper.image import (
 )
 from src.helper.loading_dataset import loading_dataset as load
 from src.helper.memory import cleanup
+from src.helper.runtime import stage
 from src.vision import build_flux_prompt
 from src.vision.rescue_instruction import generate_rescue_instruction
 from src.vision.scene_description import generate_scene_description
@@ -60,8 +68,9 @@ print("Hello, Cloudian 💙 Cloud")
 for directory in (OUTPUT_DIR, REAL_IMAGES_DIR, GEN_IMAGES_DIR):
     os.makedirs(directory, exist_ok=True)
 
-random_seed()
-data = load()
+with stage("Dataset initialization", STAGE_TIMEOUT_SECONDS):
+    random_seed()
+    data = load()
 
 
 def make_safe_stem(image_key: str) -> str:
@@ -216,12 +225,19 @@ def run_sdqm_report() -> dict[str, float] | None:
         return None
 
 
-vision_model, vision_processor = loading_gemma()
-pipe = loading_flux()
-evaluators: QualityEvaluators = load_evaluators()
+with stage("Load Gemma", MODEL_LOAD_TIMEOUT_SECONDS):
+    vision_model, vision_processor = loading_gemma()
+with stage("Load FLUX", MODEL_LOAD_TIMEOUT_SECONDS):
+    pipe = loading_flux()
+with stage("Load quality evaluators", MODEL_LOAD_TIMEOUT_SECONDS):
+    evaluators: QualityEvaluators = load_evaluators()
 
 count = 0
 skipped = 0
+attempts = 0
+consecutive_errors = 0
+stop_reason = None
+generation_started = monotonic()
 evaluation_records = []
 metadata_dir = os.path.join(OUTPUT_DIR, "_metadata")
 os.makedirs(metadata_dir, exist_ok=True)
@@ -232,6 +248,15 @@ print("=" * 80)
 
 for img_key, img_info in data.items():
     if count >= LIMIT_IMAGES:
+        break
+    if attempts >= MAX_ATTEMPTS:
+        stop_reason = f"MAX_ATTEMPTS reached ({attempts})"
+        break
+    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+        stop_reason = f"MAX_CONSECUTIVE_ERRORS reached ({consecutive_errors})"
+        break
+    if monotonic() - generation_started >= GENERATION_TIMEOUT_SECONDS:
+        stop_reason = "Generation time budget exhausted"
         break
 
     print("=" * 80)
@@ -265,14 +290,17 @@ for img_key, img_info in data.items():
             skipped += 1
             continue
 
-        content = download_image(
-            url,
-            headers=HEADERS,
-            timeout=REQUEST_TIMEOUT,
-            retries=DOWNLOAD_RETRIES,
-        )
+        attempts += 1
+        with stage("Download image", REQUEST_TIMEOUT * (DOWNLOAD_RETRIES + 1)):
+            content = download_image(
+                url,
+                headers=HEADERS,
+                timeout=REQUEST_TIMEOUT,
+                retries=DOWNLOAD_RETRIES,
+            )
         if content is None:
             print("Skip: Download Failed")
+            consecutive_errors += 1
             skipped += 1
             continue
 
@@ -280,6 +308,7 @@ for img_key, img_info in data.items():
             original_image = Image.open(BytesIO(content)).convert("RGB")
         except Exception as exc:
             print(f"Skip Invalid Image: {exc}")
+            consecutive_errors += 1
             skipped += 1
             continue
 
@@ -293,16 +322,19 @@ for img_key, img_info in data.items():
             )
 
         try:
-            scene_description = generate_scene_description(
-                image=original_image,
-                vision_model=vision_model,
-                vision_processor=vision_processor,
-            )
+            with stage("Gemma scene description", STAGE_TIMEOUT_SECONDS):
+                scene_description = generate_scene_description(
+                    image=original_image,
+                    vision_model=vision_model,
+                    vision_processor=vision_processor,
+                )
         except Exception as exc:
             print(f"Generate Image Error: {exc}")
+            consecutive_errors += 1
             skipped += 1
             del original_image
-            cleanup()
+            with stage("Cleanup", STAGE_TIMEOUT_SECONDS):
+                cleanup()
             continue
 
         print("\nScene Description")
@@ -310,16 +342,19 @@ for img_key, img_info in data.items():
         print(scene_description)
 
         try:
-            rescue_instruction = generate_rescue_instruction(
-                scene_description=scene_description,
-                vision_model=vision_model,
-                vision_processor=vision_processor,
-            )
+            with stage("Gemma rescue instruction", STAGE_TIMEOUT_SECONDS):
+                rescue_instruction = generate_rescue_instruction(
+                    scene_description=scene_description,
+                    vision_model=vision_model,
+                    vision_processor=vision_processor,
+                )
         except Exception as exc:
             print(f"LLM Error: {exc}")
+            consecutive_errors += 1
             skipped += 1
             del original_image
-            cleanup()
+            with stage("Cleanup", STAGE_TIMEOUT_SECONDS):
+                cleanup()
             continue
 
         print("\nEditing Instruction")
@@ -332,37 +367,43 @@ for img_key, img_info in data.items():
         print(flux_prompt)
 
         try:
-            generated_image = generate_rescue_image(
-                pipe=pipe,
-                image=original_image,
-                prompt=flux_prompt,
-                guidance_scale=GUIDANCE_SCALE,
-                num_inference_steps=NUM_INFERENCE_STEPS,
-                seed=BASE_SEED + count,
-            )
+            with stage("FLUX generation", STAGE_TIMEOUT_SECONDS):
+                generated_image = generate_rescue_image(
+                    pipe=pipe,
+                    image=original_image,
+                    prompt=flux_prompt,
+                    guidance_scale=GUIDANCE_SCALE,
+                    num_inference_steps=NUM_INFERENCE_STEPS,
+                    seed=BASE_SEED + count,
+                )
         except torch.cuda.OutOfMemoryError:
             print("FLUX CUDA Out Of Memory")
+            consecutive_errors += 1
             skipped += 1
             del original_image
-            cleanup()
+            with stage("Cleanup", STAGE_TIMEOUT_SECONDS):
+                cleanup()
             continue
 
-        sc_score, pq_score = evaluate_quality(
-            evaluators,
-            generated_image,
-            flux_prompt,
-        )
-        o_score = compute_o_score(sc_score, pq_score)
-        ssim_val = compute_ssim(original_image, generated_image)
+        with stage("Quality evaluation", STAGE_TIMEOUT_SECONDS):
+            sc_score, pq_score = evaluate_quality(
+                evaluators,
+                generated_image,
+                flux_prompt,
+            )
+            o_score = compute_o_score(sc_score, pq_score)
+            ssim_val = compute_ssim(original_image, generated_image)
 
         print(f"O_Score: {o_score:.4f} | SSIM: {ssim_val:.4f}")
 
         if not passes_quality_gate(o_score, ssim_val):
+            consecutive_errors = 0
             print("Rejected by quality gate")
             skipped += 1
             del original_image
             del generated_image
-            cleanup()
+            with stage("Cleanup", STAGE_TIMEOUT_SECONDS):
+                cleanup()
             continue
 
         output_path = save_generated_image(
@@ -392,6 +433,7 @@ for img_key, img_info in data.items():
         with open(metadata_path, "w", encoding="utf-8") as file:
             json.dump(metadata, file, indent=2, ensure_ascii=False)
 
+        consecutive_errors = 0
         count += 1
         print(f"Progress: {count}/{LIMIT_IMAGES}")
 
@@ -400,17 +442,21 @@ for img_key, img_info in data.items():
         del scene_description
         del rescue_instruction
         del flux_prompt
-        cleanup()
+        with stage("Cleanup", STAGE_TIMEOUT_SECONDS):
+            cleanup()
 
     except Exception:
         print("\nUnexpected Error")
+        consecutive_errors += 1
         traceback.print_exc()
-        cleanup()
+        with stage("Cleanup", STAGE_TIMEOUT_SECONDS):
+            cleanup()
         skipped += 1
         continue
 
 print("\n" + "=" * 80)
-print("Finished")
+print("Generation loop finished")
+print(f"Attempted : {attempts}")
 print(f"Generated : {count}")
 print(f"Skipped   : {skipped}")
 print(f"Output    : {OUTPUT_DIR}")
@@ -419,8 +465,19 @@ csv_path = export_evaluation_report(evaluation_records)
 if csv_path:
     print(f"CSV Report: {csv_path}")
 
-run_cmmd_report()
-sdqm_metrics = run_sdqm_report()
+if count < LIMIT_IMAGES:
+    stop_reason = stop_reason or "Dataset exhausted before reaching target"
+    write_metadata_jsonl(evaluation_records, OUTPUT_DIR)
+    print(f"Stopped: {stop_reason}. Dataset evaluation skipped.", flush=True)
+    raise SystemExit(2)
+
+with stage("Release generation models", STAGE_TIMEOUT_SECONDS):
+    del vision_model, vision_processor, pipe, evaluators
+    cleanup()
+with stage("CMMD report", EVALUATION_TIMEOUT_SECONDS):
+    run_cmmd_report()
+with stage("SDQM report", EVALUATION_TIMEOUT_SECONDS):
+    sdqm_metrics = run_sdqm_report()
 if sdqm_metrics:
     evaluation_records = attach_sdqm_metadata(evaluation_records, sdqm_metrics)
 
