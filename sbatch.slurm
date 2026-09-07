@@ -117,9 +117,9 @@ if [[ ! "$CHECK_OUT" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-if [ -z "${CUDA_VISIBLE_DEVICES:-}" ]; then
-    export CUDA_VISIBLE_DEVICES=$CHECK_OUT
-fi
+# MPS allocations can preset CUDA_VISIBLE_DEVICES=0 even when gpu_check selects
+# another physical device, so the selector's result must take precedence.
+export CUDA_VISIBLE_DEVICES=$CHECK_OUT
 
 export CUDA_MPS_PIPE_DIRECTORY=/tmp/nvidia-mps-gpu$CHECK_OUT
 
