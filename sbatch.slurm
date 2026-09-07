@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --gres=mps:a100:2
+#SBATCH --gres=mps:l40:2
 #SBATCH --mem=12G
 #SBATCH --time=24:00:00
 
@@ -88,7 +88,7 @@ export EXPECTED_PYTORCH_CUDA=12.8
 # GPU check
 # ===============================
 
-REQUIRED_VRAM=30720
+REQUIRED_VRAM=20480
 
 if CHECK_OUT=$(run_step "GPU selection" \
     "${GPU_CHECK_SCRIPT:-/usr/local/bin/gpu_check.sh}" "$REQUIRED_VRAM" "$SLURM_JOB_ID"); then
