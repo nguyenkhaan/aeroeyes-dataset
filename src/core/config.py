@@ -125,6 +125,45 @@ SC_NORM_DIVISOR = 40.0
 CMMD_BATCH_SIZE = 16
 CMMD_MAX_COUNT = 30000
 # ----------------------------------------------------------
+# Long-CLIP for the SC score (Zhang et al., ECCV 2024,
+# https://arxiv.org/abs/2403.15378). The base CLIP text encoder
+# truncates at 77 tokens, which drops most of the FLUX prompt.
+# Long-CLIP interpolates the positional embeddings to 248 tokens.
+# ----------------------------------------------------------
+LONG_CLIP_ENABLED = os.getenv("LONG_CLIP_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+LONG_CLIP_MODEL_ID = os.getenv("LONG_CLIP_MODEL_ID", "zer0int/LongCLIP-L-Diffusers")
+LONG_CLIP_MAX_TOKENS = int(os.getenv("LONG_CLIP_MAX_TOKENS", "248"))
+# ----------------------------------------------------------
+# Watermark / caption removal (EasyOCR detection + Simple LaMa inpainting).
+# Runs on the freshly downloaded image, before resize/crop.
+# ----------------------------------------------------------
+WATERMARK_REMOVAL_ENABLED = os.getenv("WATERMARK_REMOVAL_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+WATERMARK_OCR_LANGUAGES = tuple(
+    language.strip()
+    for language in os.getenv("WATERMARK_OCR_LANGUAGES", "en").split(",")
+    if language.strip()
+) or ("en",)
+WATERMARK_OCR_USE_GPU = os.getenv("WATERMARK_OCR_USE_GPU", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+WATERMARK_MIN_TEXT_CONFIDENCE = float(
+    os.getenv("WATERMARK_MIN_TEXT_CONFIDENCE", "0.2")
+)
+WATERMARK_EDGE_MARGIN_RATIO = float(os.getenv("WATERMARK_EDGE_MARGIN_RATIO", "0.12"))
+WATERMARK_WIDE_ASPECT_RATIO = float(os.getenv("WATERMARK_WIDE_ASPECT_RATIO", "3.5"))
+WATERMARK_DILATE_KERNEL = int(os.getenv("WATERMARK_DILATE_KERNEL", "7"))
+WATERMARK_DILATE_ITERATIONS = int(os.getenv("WATERMARK_DILATE_ITERATIONS", "2"))
+# ----------------------------------------------------------
 # SDQM (Synthetic Dataset Quality Metric)
 # See docs/pipeline/sdqm-integration-plan.md
 # ----------------------------------------------------------

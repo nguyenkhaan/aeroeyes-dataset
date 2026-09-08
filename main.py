@@ -32,6 +32,7 @@ from src.core.config import (
     SDQM_OUTPUT_DIR,
     SDQM_VINFO_ENABLED,
     SDQM_YOLO_EXPORT,
+    WATERMARK_REMOVAL_ENABLED,
     random_seed,
 )
 from src.evaluation import (
@@ -59,6 +60,7 @@ from src.helper.image import (
 from src.helper.loading_dataset import loading_dataset as load
 from src.helper.memory import cleanup
 from src.helper.runtime import stage
+from src.helper.watermark import remove_watermark, unload_watermark_tools
 from src.vision import build_flux_prompt
 from src.vision.rescue_instruction import generate_rescue_instruction
 from src.vision.scene_description import generate_scene_description
@@ -312,6 +314,13 @@ for img_key, img_info in data.items():
             skipped += 1
             continue
 
+        if WATERMARK_REMOVAL_ENABLED:
+            try:
+                with stage("Watermark removal", STAGE_TIMEOUT_SECONDS):
+                    original_image = remove_watermark(original_image)
+            except Exception as exc:
+                print(f"Watermark removal skipped: {exc}")
+
         original_image = resize_center_crop(original_image, IMAGE_SIZE)
 
         if torch.cuda.is_available():
@@ -472,6 +481,7 @@ if count < LIMIT_IMAGES:
     raise SystemExit(2)
 
 with stage("Release generation models", STAGE_TIMEOUT_SECONDS):
+    unload_watermark_tools()
     del vision_model, vision_processor, pipe, evaluators
     cleanup()
 with stage("CMMD report", EVALUATION_TIMEOUT_SECONDS):
