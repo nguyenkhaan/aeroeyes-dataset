@@ -1050,6 +1050,17 @@ for img_key, img_info in data.items():
                 "GB",
             )
 
+        if vision_model is None or vision_processor is None:
+            try:
+                vision_model, vision_processor = load_gemma_model()
+            except torch.cuda.OutOfMemoryError:
+                print("Gemma CUDA Out Of Memory.")
+                cleanup_cuda()
+                consecutive_errors += 1
+                skipped += 1
+                del original_image
+                continue
+
         try:
             with stage("Gemma scene description", STAGE_TIMEOUT_SECONDS):
                 scene_description = generate_scene_description(
