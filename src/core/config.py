@@ -95,9 +95,9 @@ FLUX_MODEL = FLUX_REPO
 # ----------------------------------------------------------
 IMAGE_SIZE = 1024
 LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "500"))
-MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "10"))
-MAX_CONSECUTIVE_ERRORS = int(os.getenv("MAX_CONSECUTIVE_ERRORS", "3"))
-GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT_SECONDS", "3600"))
+MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "0"))
+MAX_CONSECUTIVE_ERRORS = int(os.getenv("MAX_CONSECUTIVE_ERRORS", "0"))
+GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT_SECONDS", "0"))
 MODEL_LOAD_TIMEOUT_SECONDS = int(os.getenv("MODEL_LOAD_TIMEOUT_SECONDS", "1800"))
 STAGE_TIMEOUT_SECONDS = int(os.getenv("STAGE_TIMEOUT_SECONDS", "900"))
 EVALUATION_TIMEOUT_SECONDS = int(os.getenv("EVALUATION_TIMEOUT_SECONDS", "3600"))
@@ -106,8 +106,8 @@ for limit_name in (
     "GENERATION_TIMEOUT_SECONDS", "MODEL_LOAD_TIMEOUT_SECONDS",
     "STAGE_TIMEOUT_SECONDS", "EVALUATION_TIMEOUT_SECONDS",
 ):
-    if globals()[limit_name] <= 0:
-        raise ValueError(f"{limit_name} must be positive")
+    if globals()[limit_name] < 0:
+        raise ValueError(f"{limit_name} must be non-negative")
 REQUEST_TIMEOUT = 30
 DOWNLOAD_RETRIES = 3
 MAX_NEW_TOKENS = 256

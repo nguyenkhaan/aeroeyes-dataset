@@ -37,8 +37,10 @@ class PipelineLimitTests(unittest.TestCase):
             "MAX_ATTEMPTS": 3,
             "MAX_CONSECUTIVE_ERRORS": 2,
             "GENERATION_TIMEOUT_SECONDS": 3600,
+            "MODEL_LOAD_TIMEOUT_SECONDS": 1800,
             "STAGE_TIMEOUT_SECONDS": 600,
             "EVALUATION_TIMEOUT_SECONDS": 600,
+            "WATERMARK_REMOVAL_ENABLED": False,
             "HEADERS": {},
             "REQUEST_TIMEOUT": 10,
             "DOWNLOAD_RETRIES": 1,
@@ -48,6 +50,9 @@ class PipelineLimitTests(unittest.TestCase):
             "NUM_INFERENCE_STEPS": 20,
             "vision_model": None,
             "vision_processor": None,
+            "load_gemma_model": Mock(return_value=(None, None)),
+            "release_gemma": Mock(return_value=(None, None)),
+            "load_flux_memory_safe": Mock(return_value=None),
             "pipe": None,
             "evaluators": None,
             "torch": SimpleNamespace(cuda=SimpleNamespace(
@@ -61,6 +66,7 @@ class PipelineLimitTests(unittest.TestCase):
             "generate_rescue_instruction": Mock(return_value="add rescuers"),
             "build_flux_prompt": Mock(return_value="rescue in flood"),
             "generate_rescue_image": Mock(return_value=fake_image),
+            "generate_flux_safe": Mock(return_value=fake_image),
             "evaluate_quality": Mock(return_value=(0.8, 0.9)),
             "compute_o_score": Mock(return_value=0.85),
             "compute_ssim": Mock(return_value=0.7),
@@ -68,6 +74,7 @@ class PipelineLimitTests(unittest.TestCase):
             "save_generated_image": Mock(return_value="generated.png"),
             "save_reference_images": Mock(),
             "cleanup": Mock(),
+            "unload_watermark_tools": Mock(),
             "export_evaluation_report": Mock(return_value=None),
             "run_cmmd_report": self.cmmd,
             "run_sdqm_report": self.sdqm,
@@ -77,6 +84,7 @@ class PipelineLimitTests(unittest.TestCase):
                 for index in range(12)
             },
         }
+        self.environment["generate_flux_safe"] = self.environment["generate_rescue_image"]
 
     def run_pipeline(self):
         # Execute the production loop without loading GPU models at module import.
@@ -101,6 +109,24 @@ class PipelineLimitTests(unittest.TestCase):
     def test_quality_rejections_stop_at_attempt_limit_without_dataset_evaluation(self):
         exit_code = self.run_pipeline()
         self.assertEqual(self.download.call_count, 3)
+        self.assertEqual(exit_code, 2)
+        self.cmmd.assert_not_called()
+        self.sdqm.assert_not_called()
+
+    def test_zero_limits_scan_dataset_until_target_or_exhaustion(self):
+        self.environment["MAX_ATTEMPTS"] = 0
+        self.environment["MAX_CONSECUTIVE_ERRORS"] = 0
+        self.environment["data"] = {
+            f"image_{index}": {
+                "incidents": {"flood": 1},
+                "url": f"url_{index}",
+            }
+            for index in range(5)
+        }
+
+        exit_code = self.run_pipeline()
+
+        self.assertEqual(self.download.call_count, 5)
         self.assertEqual(exit_code, 2)
         self.cmmd.assert_not_called()
         self.sdqm.assert_not_called()

@@ -844,7 +844,7 @@ for img_key, img_info in data.items():
         break
 
 
-    if attempts >= MAX_ATTEMPTS:
+    if MAX_ATTEMPTS > 0 and attempts >= MAX_ATTEMPTS:
 
         stop_reason = (
             f"MAX_ATTEMPTS reached ({attempts})"
@@ -854,8 +854,8 @@ for img_key, img_info in data.items():
 
 
     if (
-        consecutive_errors
-        >= MAX_CONSECUTIVE_ERRORS
+        MAX_CONSECUTIVE_ERRORS > 0
+        and consecutive_errors >= MAX_CONSECUTIVE_ERRORS
     ):
 
         stop_reason = (
@@ -867,8 +867,8 @@ for img_key, img_info in data.items():
 
 
     if (
-        monotonic() - generation_started
-        >= GENERATION_TIMEOUT_SECONDS
+        GENERATION_TIMEOUT_SECONDS > 0
+        and monotonic() - generation_started >= GENERATION_TIMEOUT_SECONDS
     ):
 
         stop_reason = (
