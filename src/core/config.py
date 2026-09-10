@@ -94,7 +94,7 @@ FLUX_MODEL = FLUX_REPO
 # Generation Parameters
 # ----------------------------------------------------------
 IMAGE_SIZE = 1024
-LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "3"))
+LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "500"))
 MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "10"))
 MAX_CONSECUTIVE_ERRORS = int(os.getenv("MAX_CONSECUTIVE_ERRORS", "3"))
 GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT_SECONDS", "3600"))
