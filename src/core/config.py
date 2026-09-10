@@ -86,15 +86,15 @@ CMMD_REPO_DIR = os.getenv(
     "CMMD_REPO_DIR",
     str(PROJECT_ROOT / "cmmd-pytorch"),
 )
-GENERAL_MODEL = "google/gemma-4-12B-it" 
-FLUX_REPO = "black-forest-labs/FLUX.2-klein-9B"
+GENERAL_MODEL = "google/gemma-4-E4B-it"
+FLUX_REPO = "black-forest-labs/FLUX.2-klein-4B"
 # black-forest-labs/FLUX.2-dev
 FLUX_MODEL = FLUX_REPO
 # ----------------------------------------------------------
 # Generation Parameters
 # ----------------------------------------------------------
 IMAGE_SIZE = 1024
-LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "1"))
+LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "3"))
 MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "10"))
 MAX_CONSECUTIVE_ERRORS = int(os.getenv("MAX_CONSECUTIVE_ERRORS", "3"))
 GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT_SECONDS", "3600"))
