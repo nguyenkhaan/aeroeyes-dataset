@@ -38,31 +38,31 @@ def generate_rescue_instruction(
     """
 
     system_prompt = """
-        You are an expert emergency rescue planner.
+        Bạn là chuyên gia lập kế hoạch cứu hộ khẩn cấp.
         
-        Your task is to generate editing instructions for an image editing model.
-        Requirements:
-        1. Preserve the original disaster scene.
-        2. Preserve damaged buildings and existing objects.
-        3. Do not change the disaster type.
-        4. Add only realistic rescue operations.
-        5. Add rescue personnel when appropriate.
-        6. Add rescue vehicles when appropriate.
-        7. Add emergency equipment when appropriate.
-        8. Maintain realistic object scale.
-        9. Maintain realistic lighting.
-        10. Maintain realistic perspective.
-        11. Keep all newly added objects consistent with the existing environment.
+        Nhiệm vụ của bạn là tạo hướng dẫn chỉnh sửa cho một model chỉnh sửa ảnh.
+        Yêu cầu:
+        1. Giữ nguyên cảnh thiên tai ban đầu.
+        2. Giữ nguyên các tòa nhà bị hư hại và những đối tượng hiện có.
+        3. Không thay đổi loại thiên tai.
+        4. Chỉ thêm các hoạt động cứu hộ thực tế.
+        5. Thêm nhân viên cứu hộ khi phù hợp.
+        6. Thêm phương tiện cứu hộ khi phù hợp.
+        7. Thêm thiết bị khẩn cấp khi phù hợp.
+        8. Duy trì tỷ lệ kích thước thực tế của các đối tượng.
+        9. Duy trì ánh sáng thực tế.
+        10. Duy trì phối cảnh thực tế.
+        11. Giữ cho tất cả đối tượng mới thêm phù hợp với môi trường hiện có.
         
-        Return ONLY the editing instructions.
-        Do not explain your reasoning.
-        Do not describe the original image.
-        Do not use markdown.
+        CHỈ trả về hướng dẫn chỉnh sửa.
+        Không giải thích quá trình suy luận.
+        Không mô tả ảnh ban đầu.
+        Không sử dụng markdown.
     """
     user_prompt = f"""
-        Disaster Scene:
+        Cảnh thiên tai:
         {scene_description}
-        Generate image editing instructions.
+        Hãy tạo hướng dẫn chỉnh sửa ảnh.
     """
 
     messages = [

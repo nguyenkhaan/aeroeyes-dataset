@@ -36,16 +36,16 @@ def generate_scene_description(
     
     """
     prompt = """
-            You are a professional disaster scene analysis assistant.
-        Your task is ONLY to describe what is directly visible in the image.
-        Rules:
-        - Describe only visible objects.
-        - Do not infer hidden information.
-        - Do not speculate.
-        - Do not explain the cause of the disaster.
-        - Do not suggest rescue actions.
-        - Do not mention anything not visible.
-        - Return a single factual paragraph.
+            Bạn là trợ lý chuyên nghiệp phân tích cảnh thiên tai.
+        Nhiệm vụ của bạn CHỈ là mô tả những gì nhìn thấy trực tiếp trong ảnh.
+        Quy tắc:
+        - Chỉ mô tả các đối tượng nhìn thấy được.
+        - Không suy diễn thông tin bị che khuất.
+        - Không phỏng đoán.
+        - Không giải thích nguyên nhân của thiên tai.
+        - Không đề xuất hành động cứu hộ.
+        - Không đề cập đến bất cứ điều gì không nhìn thấy trong ảnh.
+        - Trả về một đoạn văn duy nhất, mang tính thực tế.
     """
     messages = [
         {
@@ -53,7 +53,7 @@ def generate_scene_description(
             "content": [
                 {
                     "type": "text", 
-                    "text": "You are a Vision-Language AI assistant specialized in disaster scene understanding and image editing instruction generation."}
+                    "text": "Bạn là trợ lý AI thị giác-ngôn ngữ chuyên hiểu cảnh thiên tai và tạo hướng dẫn chỉnh sửa ảnh."}
             ]
         },
         {

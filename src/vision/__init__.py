@@ -6,31 +6,31 @@ def build_flux_prompt(
     Build the final prompt for FLUX image editing.
     """
     prompt = f"""
-You are editing an existing disaster photograph.
+Bạn đang chỉnh sửa một bức ảnh thiên tai hiện có.
 
-Original Scene
+### Cảnh ban đầu
 --------------
 {scene_description}
-Editing Instructions
+### Hướng dẫn chỉnh sửa
 --------------------
 {rescue_instruction}
-Requirements
-    - Preserve the original disaster scene.
-    - Preserve all existing buildings, vehicles, roads and environmental objects.
-    - Do not change the disaster type.
-    - Add only realistic rescue operations.
-    - Blend newly added rescue personnel, vehicles and equipment naturally.
-    - Maintain realistic lighting, shadows and perspective.
-    - Maintain correct object proportions.
-    - Generate anatomically correct humans.
-    - Produce seamless image editing without visible artifacts.
-    Style
-    - Documentary disaster photography
-    - Photojournalism
-    - Real-world emergency response
-    - Natural color grading
-    - Authentic textures
-    - High realism
-    - Non-cinematic
+### Yêu cầu
+    - Giữ nguyên cảnh thiên tai ban đầu.
+    - Giữ nguyên tất cả tòa nhà, phương tiện, con đường và đối tượng môi trường hiện có.
+    - Không thay đổi loại thiên tai.
+    - Chỉ thêm các hoạt động cứu hộ thực tế.
+    - Hòa trộn tự nhiên nhân viên cứu hộ, phương tiện và thiết bị mới thêm.
+    - Duy trì ánh sáng, bóng đổ và phối cảnh thực tế.
+    - Duy trì tỷ lệ chính xác giữa các đối tượng.
+    - Tạo con người đúng về mặt giải phẫu.
+    - Chỉnh sửa ảnh liền mạch, không có lỗi nhìn thấy được.
+### Phong cách
+    - Nhiếp ảnh thiên tai mang tính tài liệu
+    - Ảnh báo chí
+    - Hoạt động ứng phó khẩn cấp ngoài đời thực
+    - Chỉnh màu tự nhiên
+    - Kết cấu chân thực
+    - Độ chân thực cao
+    - Không mang phong cách điện ảnh
 """
     return prompt.strip()

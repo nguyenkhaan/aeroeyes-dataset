@@ -494,43 +494,43 @@ def load_flux(token: str | None):
 # ---------------------------------------------------------------------------
 
 SCENE_SYSTEM = (
-    "You are a Vision-Language AI assistant specialized in disaster scene "
-    "understanding and image editing instruction generation."
+    "Bạn là trợ lý AI thị giác-ngôn ngữ chuyên hiểu cảnh thiên tai "
+    "và tạo hướng dẫn chỉnh sửa ảnh."
 )
 SCENE_PROMPT = """
-You are a professional disaster scene analysis assistant.
-Your task is ONLY to describe what is directly visible in the image.
-Rules:
-- Describe only visible objects.
-- Do not infer hidden information.
-- Do not speculate.
-- Do not explain the cause of the disaster.
-- Do not suggest rescue actions.
-- Do not mention anything not visible.
-- Return a single factual paragraph.
+Bạn là trợ lý chuyên nghiệp phân tích cảnh thiên tai.
+Nhiệm vụ của bạn CHỈ là mô tả những gì nhìn thấy trực tiếp trong ảnh.
+Quy tắc:
+- Chỉ mô tả các đối tượng nhìn thấy được.
+- Không suy diễn thông tin bị che khuất.
+- Không phỏng đoán.
+- Không giải thích nguyên nhân của thiên tai.
+- Không đề xuất hành động cứu hộ.
+- Không đề cập đến bất cứ điều gì không nhìn thấy trong ảnh.
+- Trả về một đoạn văn duy nhất, mang tính thực tế.
 """.strip()
 
 INSTRUCTION_SYSTEM = """
-You are an expert emergency rescue planner.
+Bạn là chuyên gia lập kế hoạch cứu hộ khẩn cấp.
 
-Your task is to generate editing instructions for an image editing model.
-Requirements:
-1. Preserve the original disaster scene.
-2. Preserve damaged buildings and existing objects.
-3. Do not change the disaster type.
-4. Add only realistic rescue operations.
-5. Add rescue personnel when appropriate.
-6. Add rescue vehicles when appropriate.
-7. Add emergency equipment when appropriate.
-8. Maintain realistic object scale.
-9. Maintain realistic lighting.
-10. Maintain realistic perspective.
-11. Keep all newly added objects consistent with the existing environment.
+Nhiệm vụ của bạn là tạo hướng dẫn chỉnh sửa cho một model chỉnh sửa ảnh.
+Yêu cầu:
+1. Giữ nguyên cảnh thiên tai ban đầu.
+2. Giữ nguyên các tòa nhà bị hư hại và những đối tượng hiện có.
+3. Không thay đổi loại thiên tai.
+4. Chỉ thêm các hoạt động cứu hộ thực tế.
+5. Thêm nhân viên cứu hộ khi phù hợp.
+6. Thêm phương tiện cứu hộ khi phù hợp.
+7. Thêm thiết bị khẩn cấp khi phù hợp.
+8. Duy trì tỷ lệ kích thước thực tế của các đối tượng.
+9. Duy trì ánh sáng thực tế.
+10. Duy trì phối cảnh thực tế.
+11. Giữ cho tất cả đối tượng mới thêm phù hợp với môi trường hiện có.
 
-Return ONLY the editing instructions.
-Do not explain your reasoning.
-Do not describe the original image.
-Do not use markdown.
+CHỈ trả về hướng dẫn chỉnh sửa.
+Không giải thích quá trình suy luận.
+Không mô tả ảnh ban đầu.
+Không sử dụng markdown.
 """.strip()
 
 
@@ -564,7 +564,7 @@ def generate_scene_description(model, processor, image: Image.Image) -> str:
 
 
 def generate_rescue_instruction(model, processor, scene_description: str) -> str:
-    user_prompt = f"Disaster Scene:\n{scene_description}\nGenerate image editing instructions."
+    user_prompt = f"Cảnh thiên tai:\n{scene_description}\nHãy tạo hướng dẫn chỉnh sửa ảnh."
     messages = [
         {"role": "system", "content": [{"type": "text", "text": INSTRUCTION_SYSTEM}]},
         {"role": "user", "content": [{"type": "text", "text": user_prompt}]},
@@ -574,32 +574,32 @@ def generate_rescue_instruction(model, processor, scene_description: str) -> str
 
 def build_flux_prompt(scene_description: str, rescue_instruction: str) -> str:
     return f"""
-You are editing an existing disaster photograph.
+Bạn đang chỉnh sửa một bức ảnh thiên tai hiện có.
 
-Original Scene
+### Cảnh ban đầu
 --------------
 {scene_description}
-Editing Instructions
+### Hướng dẫn chỉnh sửa
 --------------------
 {rescue_instruction}
-Requirements
-    - Preserve the original disaster scene.
-    - Preserve all existing buildings, vehicles, roads and environmental objects.
-    - Do not change the disaster type.
-    - Add only realistic rescue operations.
-    - Blend newly added rescue personnel, vehicles and equipment naturally.
-    - Maintain realistic lighting, shadows and perspective.
-    - Maintain correct object proportions.
-    - Generate anatomically correct humans.
-    - Produce seamless image editing without visible artifacts.
-    Style
-    - Documentary disaster photography
-    - Photojournalism
-    - Real-world emergency response
-    - Natural color grading
-    - Authentic textures
-    - High realism
-    - Non-cinematic
+### Yêu cầu
+    - Giữ nguyên cảnh thiên tai ban đầu.
+    - Giữ nguyên tất cả tòa nhà, phương tiện, con đường và đối tượng môi trường hiện có.
+    - Không thay đổi loại thiên tai.
+    - Chỉ thêm các hoạt động cứu hộ thực tế.
+    - Hòa trộn tự nhiên nhân viên cứu hộ, phương tiện và thiết bị mới thêm.
+    - Duy trì ánh sáng, bóng đổ và phối cảnh thực tế.
+    - Duy trì tỷ lệ chính xác giữa các đối tượng.
+    - Tạo con người đúng về mặt giải phẫu.
+    - Chỉnh sửa ảnh liền mạch, không có lỗi nhìn thấy được.
+### Phong cách
+    - Nhiếp ảnh thiên tai mang tính tài liệu
+    - Ảnh báo chí
+    - Hoạt động ứng phó khẩn cấp ngoài đời thực
+    - Chỉnh màu tự nhiên
+    - Kết cấu chân thực
+    - Độ chân thực cao
+    - Không mang phong cách điện ảnh
 """.strip()
 
 
