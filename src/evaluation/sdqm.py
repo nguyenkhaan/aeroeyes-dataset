@@ -42,6 +42,12 @@ def write_sdqm_status_report(
     output_dir: str | Path,
     status_report: dict[str, object],
 ) -> Path:
+    """
+    Persist an SDQM run report to ``<output_dir>/sdqm_report.json``.
+
+    Used for both completed runs and failures so the pipeline always leaves a
+    machine-readable artifact behind, even when SDQM raises.
+    """
     report_dir = Path(output_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / SDQM_REPORT_FILENAME
@@ -256,91 +262,116 @@ def compute_dataset_sdqm(
     sdqm_dir = Path(output_dir or SDQM_OUTPUT_DIR)
     sdqm_dir.mkdir(parents=True, exist_ok=True)
     regression_csv = map_csv if map_csv is not None else SDQM_MAP_CSV
-    calculate_sdqm = _load_calculate_sdqm()
 
-    use_yolo_export = SDQM_YOLO_EXPORT if export_yolo is None else export_yolo
-    use_vinfo = SDQM_VINFO_ENABLED if include_vinfo is None else include_vinfo
-    if use_vinfo:
-        validate_vinfo_dataset(SDQM_VINFO_DATASET)
-    real_yolo_root: Path | None = None
-    synthetic_yolo_root: Path | None = None
+    try:
+        calculate_sdqm = _load_calculate_sdqm()
 
-    if use_yolo_export:
-        real_yolo_root, synthetic_yolo_root = export_yolo_pair(
-            ref_dir=ref_dir,
-            eval_dir=eval_dir,
-            output_dir=sdqm_dir / "yolo",
-            data_yaml_template=SDQM_YOLO_DATA_YAML,
-        )
-        real_embed_dir = real_yolo_root / "images" / "train"
-        synthetic_embed_dir = synthetic_yolo_root / "images" / "train"
-        yolo_layout = {
-            "real": str(real_yolo_root.resolve()),
-            "synthetic": str(synthetic_yolo_root.resolve()),
-        }
-    else:
-        real_embed_dir = Path(ref_dir)
-        synthetic_embed_dir = Path(eval_dir)
-        yolo_layout = None
+        use_yolo_export = SDQM_YOLO_EXPORT if export_yolo is None else export_yolo
+        use_vinfo = SDQM_VINFO_ENABLED if include_vinfo is None else include_vinfo
+        if use_vinfo:
+            validate_vinfo_dataset(SDQM_VINFO_DATASET)
+        real_yolo_root: Path | None = None
+        synthetic_yolo_root: Path | None = None
 
-    real_prefix = sdqm_dir / "real_embeddings"
-    synthetic_prefix = sdqm_dir / "synthetic_embeddings"
-
-    embed_image_directory(real_embed_dir, real_prefix, model_name=embedding_model)
-    embed_image_directory(
-        synthetic_embed_dir,
-        synthetic_prefix,
-        model_name=embedding_model,
-    )
-
-    image_size = _resolve_image_size(real_embed_dir)
-
-    selected_metrics = metric_types or SDQM_METRIC_TYPES
-
-    metric_values = calculate_sdqm(
-        real_files=[str(real_prefix.with_suffix(".pkl"))],
-        synthetic_files=[str(synthetic_prefix.with_suffix(".pkl"))],
-        image_size=image_size,
-        output=str(sdqm_dir / "sdqm_values.csv"),
-        metric_type=selected_metrics,
-        dataset="auto",
-        temp_dir=str(sdqm_dir / "vinfo_temp"),
-    )
-
-    flattened = _flatten_metric_values(metric_values)
-    if not flattened:
-        raise RuntimeError(
-            "SDQM returned no numeric metrics. Review the preceding metric errors."
-        )
-    vinfo_status = "skipped"
-
-    if use_vinfo:
-        if not use_yolo_export or real_yolo_root is None or synthetic_yolo_root is None:
-            vinfo_status = "skipped_missing_yolo_export"
+        if use_yolo_export:
+            real_yolo_root, synthetic_yolo_root = export_yolo_pair(
+                ref_dir=ref_dir,
+                eval_dir=eval_dir,
+                output_dir=sdqm_dir / "yolo",
+                data_yaml_template=SDQM_YOLO_DATA_YAML,
+            )
+            real_embed_dir = real_yolo_root / "images" / "train"
+            synthetic_embed_dir = synthetic_yolo_root / "images" / "train"
+            yolo_layout = {
+                "real": str(real_yolo_root.resolve()),
+                "synthetic": str(synthetic_yolo_root.resolve()),
+            }
         else:
-            ultralytics_ready, ultralytics_message = check_custom_ultralytics()
-            if not ultralytics_ready:
-                print(f"V-Info skipped: {ultralytics_message}")
-                vinfo_status = "skipped_missing_ultralytics"
-            else:
-                try:
-                    vinfo_metrics = compute_vinfo_metrics(
-                        real_yolo_root=real_yolo_root,
-                        synthetic_yolo_root=synthetic_yolo_root,
-                        output_dir=sdqm_dir / "vinfo",
-                        image_size=image_size[0],
-                        dataset=SDQM_VINFO_DATASET,
-                    )
-                    flattened.update(vinfo_metrics)
-                    vinfo_status = "completed"
-                except Exception as exc:  # noqa: BLE001
-                    # V-Info is optional; upstream validator failures must not discard base SDQM metrics.
-                    print(f"V-Info calculation failed: {exc}")
-                    vinfo_status = f"failed: {exc}"
+            real_embed_dir = Path(ref_dir)
+            synthetic_embed_dir = Path(eval_dir)
+            yolo_layout = None
 
-    _write_metric_values_csv(sdqm_dir / "sdqm_values.csv", flattened)
-    _maybe_append_history(flattened, sdqm_dir)
-    regression_results = _maybe_run_regression(sdqm_dir, regression_csv)
+        real_prefix = sdqm_dir / "real_embeddings"
+        synthetic_prefix = sdqm_dir / "synthetic_embeddings"
+
+        embed_image_directory(real_embed_dir, real_prefix, model_name=embedding_model)
+        embed_image_directory(
+            synthetic_embed_dir,
+            synthetic_prefix,
+            model_name=embedding_model,
+        )
+
+        image_size = _resolve_image_size(real_embed_dir)
+
+        selected_metrics = metric_types or SDQM_METRIC_TYPES
+
+        # dataset="auto" (not "N/A"): upstream calculate_sdqm only binds its
+        # internal `detected_dataset` inside the `if dataset == "auto"` branch,
+        # so any other value raises UnboundLocalError and drops every metric.
+        metric_values = calculate_sdqm(
+            real_files=[str(real_prefix.with_suffix(".pkl"))],
+            synthetic_files=[str(synthetic_prefix.with_suffix(".pkl"))],
+            image_size=image_size,
+            output=str(sdqm_dir / "sdqm_values.csv"),
+            metric_type=selected_metrics,
+            dataset="auto",
+            temp_dir=str(sdqm_dir / "vinfo_temp"),
+        )
+
+        flattened = _flatten_metric_values(metric_values)
+        if not flattened:
+            raise RuntimeError(
+                "SDQM returned no numeric metrics. Review the preceding metric errors."
+            )
+        vinfo_status = "skipped"
+
+        if use_vinfo:
+            if (
+                not use_yolo_export
+                or real_yolo_root is None
+                or synthetic_yolo_root is None
+            ):
+                vinfo_status = "skipped_missing_yolo_export"
+            else:
+                ultralytics_ready, ultralytics_message = check_custom_ultralytics()
+                if not ultralytics_ready:
+                    print(f"V-Info skipped: {ultralytics_message}")
+                    vinfo_status = "skipped_missing_ultralytics"
+                else:
+                    try:
+                        vinfo_metrics = compute_vinfo_metrics(
+                            real_yolo_root=real_yolo_root,
+                            synthetic_yolo_root=synthetic_yolo_root,
+                            output_dir=sdqm_dir / "vinfo",
+                            image_size=image_size[0],
+                            dataset=SDQM_VINFO_DATASET,
+                        )
+                        flattened.update(vinfo_metrics)
+                        vinfo_status = "completed"
+                    except Exception as exc:  # noqa: BLE001
+                        # V-Info is optional; upstream validator failures must
+                        # not discard base SDQM metrics.
+                        print(f"V-Info calculation failed: {exc}")
+                        vinfo_status = f"failed: {exc}"
+
+        _write_metric_values_csv(sdqm_dir / "sdqm_values.csv", flattened)
+        _maybe_append_history(flattened, sdqm_dir)
+        regression_results = _maybe_run_regression(sdqm_dir, regression_csv)
+    except Exception as exc:
+        try:
+            write_sdqm_status_report(
+                sdqm_dir,
+                {
+                    "status": "failed",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "real_image_count": len(real_images),
+                    "synthetic_image_count": len(synthetic_images),
+                    "embedding_model": embedding_model,
+                },
+            )
+        except Exception as report_exc:  # noqa: BLE001
+            print(f"Could not write SDQM failure report: {report_exc}")
+        raise
 
     report = {
         "status": "completed",

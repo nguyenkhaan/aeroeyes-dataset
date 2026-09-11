@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from src.core.config import (
     CLIP_MODEL_ID,
     HF_HUB_CACHE,
+    LONG_CLIP_ENABLED,
+    LONG_CLIP_MAX_TOKENS,
+    LONG_CLIP_MODEL_ID,
     O_SCORE_THRESHOLD,
     SC_NORM_DIVISOR,
     SSIM_MAX_THRESHOLD,
@@ -17,7 +20,10 @@ import torch
 from PIL import Image
 from skimage.metrics import structural_similarity as _ssim
 from torchvision import transforms
-from transformers import CLIPModel, CLIPProcessor
+from transformers import CLIPConfig, CLIPModel, CLIPProcessor
+
+_BASE_CLIP_MAX_TOKENS = 77
+
 
 @dataclass
 class QualityEvaluators:
@@ -26,6 +32,7 @@ class QualityEvaluators:
     clip_iqa: torch.nn.Module
     pq_transform: transforms.Compose
     device: str
+    max_text_tokens: int = _BASE_CLIP_MAX_TOKENS
 
 
 def load_evaluators(device: str | None = None) -> QualityEvaluators:
@@ -33,14 +40,31 @@ def load_evaluators(device: str | None = None) -> QualityEvaluators:
     eval_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading evaluators on: {eval_device}...")
 
-    clip_model = CLIPModel.from_pretrained(
-        CLIP_MODEL_ID,
-        cache_dir=str(HF_HUB_CACHE),
-    ).to(eval_device)
-    clip_processor = CLIPProcessor.from_pretrained(
-        CLIP_MODEL_ID,
-        cache_dir=str(HF_HUB_CACHE),
-    )
+    if LONG_CLIP_ENABLED:
+        model_id = LONG_CLIP_MODEL_ID
+        max_text_tokens = LONG_CLIP_MAX_TOKENS
+        clip_config = CLIPConfig.from_pretrained(model_id, cache_dir=str(HF_HUB_CACHE))
+        clip_config.text_config.max_position_embeddings = max_text_tokens
+        clip_model = CLIPModel.from_pretrained(
+            model_id,
+            config=clip_config,
+            cache_dir=str(HF_HUB_CACHE),
+        )
+        clip_processor = CLIPProcessor.from_pretrained(
+            model_id,
+            cache_dir=str(HF_HUB_CACHE),
+            padding="max_length",
+            max_length=max_text_tokens,
+        )
+        print(f"SC score: Long-CLIP enabled ({model_id}, {max_text_tokens} tokens).")
+    else:
+        model_id = CLIP_MODEL_ID
+        max_text_tokens = _BASE_CLIP_MAX_TOKENS
+        clip_model = CLIPModel.from_pretrained(model_id, cache_dir=str(HF_HUB_CACHE))
+        clip_processor = CLIPProcessor.from_pretrained(model_id, cache_dir=str(HF_HUB_CACHE))
+
+    clip_model = clip_model.to(eval_device)
+    clip_model.eval()
     clip_iqa = pyiqa.create_metric("clipiqa", device=eval_device)
     pq_transform = transforms.Compose([transforms.ToTensor()])
 
@@ -50,6 +74,7 @@ def load_evaluators(device: str | None = None) -> QualityEvaluators:
         clip_iqa=clip_iqa,
         pq_transform=pq_transform,
         device=eval_device,
+        max_text_tokens=max_text_tokens,
     )
 
 
@@ -61,7 +86,9 @@ def evaluate_quality(
     """
     Compute SC (CLIP score, raw × 100) and PQ (CLIP-IQA).
 
-    Matches humaninstruction-ver2-8 Cell 11.5.
+    Matches humaninstruction-ver2-8 Cell 11.5. When Long-CLIP is enabled the
+    text encoder accepts up to LONG_CLIP_MAX_TOKENS tokens, so the full FLUX
+    prompt contributes to the SC score instead of being truncated at 77.
     """
     img_tensor = (
         evaluators.pq_transform(generated_pil)
@@ -75,7 +102,8 @@ def evaluate_quality(
         text=[prompt],
         images=generated_pil,
         return_tensors="pt",
-        padding=True,
+        padding="max_length",
+        max_length=evaluators.max_text_tokens,
         truncation=True,
     ).to(evaluators.device)
     with torch.no_grad():

@@ -94,10 +94,10 @@ FLUX_MODEL = FLUX_REPO
 # Generation Parameters
 # ----------------------------------------------------------
 IMAGE_SIZE = 1024
-LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "3"))
-MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "10"))
-MAX_CONSECUTIVE_ERRORS = int(os.getenv("MAX_CONSECUTIVE_ERRORS", "3"))
-GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT_SECONDS", "3600"))
+LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "500"))
+MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "0"))
+MAX_CONSECUTIVE_ERRORS = int(os.getenv("MAX_CONSECUTIVE_ERRORS", "0"))
+GENERATION_TIMEOUT_SECONDS = int(os.getenv("GENERATION_TIMEOUT_SECONDS", "0"))
 MODEL_LOAD_TIMEOUT_SECONDS = int(os.getenv("MODEL_LOAD_TIMEOUT_SECONDS", "1800"))
 STAGE_TIMEOUT_SECONDS = int(os.getenv("STAGE_TIMEOUT_SECONDS", "900"))
 EVALUATION_TIMEOUT_SECONDS = int(os.getenv("EVALUATION_TIMEOUT_SECONDS", "3600"))
@@ -106,8 +106,8 @@ for limit_name in (
     "GENERATION_TIMEOUT_SECONDS", "MODEL_LOAD_TIMEOUT_SECONDS",
     "STAGE_TIMEOUT_SECONDS", "EVALUATION_TIMEOUT_SECONDS",
 ):
-    if globals()[limit_name] <= 0:
-        raise ValueError(f"{limit_name} must be positive")
+    if globals()[limit_name] < 0:
+        raise ValueError(f"{limit_name} must be non-negative")
 REQUEST_TIMEOUT = 30
 DOWNLOAD_RETRIES = 3
 MAX_NEW_TOKENS = 256
@@ -124,6 +124,45 @@ SSIM_MAX_THRESHOLD = 0.90
 SC_NORM_DIVISOR = 40.0
 CMMD_BATCH_SIZE = 16
 CMMD_MAX_COUNT = 30000
+# ----------------------------------------------------------
+# Long-CLIP for the SC score (Zhang et al., ECCV 2024,
+# https://arxiv.org/abs/2403.15378). The base CLIP text encoder
+# truncates at 77 tokens, which drops most of the FLUX prompt.
+# Long-CLIP interpolates the positional embeddings to 248 tokens.
+# ----------------------------------------------------------
+LONG_CLIP_ENABLED = os.getenv("LONG_CLIP_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+LONG_CLIP_MODEL_ID = os.getenv("LONG_CLIP_MODEL_ID", "zer0int/LongCLIP-L-Diffusers")
+LONG_CLIP_MAX_TOKENS = int(os.getenv("LONG_CLIP_MAX_TOKENS", "248"))
+# ----------------------------------------------------------
+# Watermark / caption removal (EasyOCR detection + Simple LaMa inpainting).
+# Runs on the freshly downloaded image, before resize/crop.
+# ----------------------------------------------------------
+WATERMARK_REMOVAL_ENABLED = os.getenv("WATERMARK_REMOVAL_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+WATERMARK_OCR_LANGUAGES = tuple(
+    language.strip()
+    for language in os.getenv("WATERMARK_OCR_LANGUAGES", "en").split(",")
+    if language.strip()
+) or ("en",)
+WATERMARK_OCR_USE_GPU = os.getenv("WATERMARK_OCR_USE_GPU", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+WATERMARK_MIN_TEXT_CONFIDENCE = float(
+    os.getenv("WATERMARK_MIN_TEXT_CONFIDENCE", "0.2")
+)
+WATERMARK_EDGE_MARGIN_RATIO = float(os.getenv("WATERMARK_EDGE_MARGIN_RATIO", "0.12"))
+WATERMARK_WIDE_ASPECT_RATIO = float(os.getenv("WATERMARK_WIDE_ASPECT_RATIO", "3.5"))
+WATERMARK_DILATE_KERNEL = int(os.getenv("WATERMARK_DILATE_KERNEL", "7"))
+WATERMARK_DILATE_ITERATIONS = int(os.getenv("WATERMARK_DILATE_ITERATIONS", "2"))
 # ----------------------------------------------------------
 # SDQM (Synthetic Dataset Quality Metric)
 # See docs/pipeline/sdqm-integration-plan.md

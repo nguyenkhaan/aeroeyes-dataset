@@ -39,6 +39,7 @@ from src.core.config import (
     SDQM_OUTPUT_DIR,
     SDQM_VINFO_ENABLED,
     SDQM_YOLO_EXPORT,
+    WATERMARK_REMOVAL_ENABLED,
     random_seed,
 )
 from src.evaluation import (
@@ -65,6 +66,7 @@ from src.helper.image import (
 from src.helper.loading_dataset import loading_dataset as load
 from src.helper.memory import cleanup
 from src.helper.runtime import stage
+from src.helper.watermark import remove_watermark, unload_watermark_tools
 from src.vision import build_flux_prompt
 from src.vision.rescue_instruction import generate_rescue_instruction
 from src.vision.scene_description import generate_scene_description
@@ -842,7 +844,7 @@ for img_key, img_info in data.items():
         break
 
 
-    if attempts >= MAX_ATTEMPTS:
+    if MAX_ATTEMPTS > 0 and attempts >= MAX_ATTEMPTS:
 
         stop_reason = (
             f"MAX_ATTEMPTS reached ({attempts})"
@@ -852,8 +854,8 @@ for img_key, img_info in data.items():
 
 
     if (
-        consecutive_errors
-        >= MAX_CONSECUTIVE_ERRORS
+        MAX_CONSECUTIVE_ERRORS > 0
+        and consecutive_errors >= MAX_CONSECUTIVE_ERRORS
     ):
 
         stop_reason = (
@@ -865,8 +867,8 @@ for img_key, img_info in data.items():
 
 
     if (
-        monotonic() - generation_started
-        >= GENERATION_TIMEOUT_SECONDS
+        GENERATION_TIMEOUT_SECONDS > 0
+        and monotonic() - generation_started >= GENERATION_TIMEOUT_SECONDS
     ):
 
         stop_reason = (
@@ -1020,65 +1022,52 @@ for img_key, img_info in data.items():
 
             continue
 
-
-        original_image = resize_center_crop(
-            original_image,
-            IMAGE_SIZE,
-        )
-
-
-        # ====================================================
-        # Load Gemma only for prompt generation
-        #
-        # FLUX is NOT loaded yet.
-        #
-        # This is the most important memory change.
-        # ====================================================
-
-        if vision_model is None:
+        if WATERMARK_REMOVAL_ENABLED:
 
             try:
 
-                (
-                    vision_model,
-                    vision_processor,
-                ) = load_gemma_model()
+                with stage(
+                    "Watermark removal",
+                    STAGE_TIMEOUT_SECONDS,
+                ):
 
-            except torch.cuda.OutOfMemoryError:
+                    original_image = remove_watermark(
+                        original_image
+                    )
+
+            except Exception as exc:
 
                 print(
-                    "Gemma CUDA Out Of Memory."
+                    f"Watermark removal skipped: {exc}"
                 )
 
-                cleanup_cuda()
+        original_image = resize_center_crop(original_image, IMAGE_SIZE)
 
+        if torch.cuda.is_available():
+            print(
+                "GPU Memory:",
+                round(torch.cuda.memory_allocated() / 1024**3, 2),
+                "GB",
+            )
+
+        if vision_model is None or vision_processor is None:
+            try:
+                vision_model, vision_processor = load_gemma_model()
+            except torch.cuda.OutOfMemoryError:
+                print("Gemma CUDA Out Of Memory.")
+                cleanup_cuda()
                 consecutive_errors += 1
                 skipped += 1
-
                 del original_image
-
                 continue
 
-
-        # ====================================================
-        # Gemma scene description
-        # ====================================================
-
         try:
-
-            with stage(
-                "Gemma scene description",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-
-                scene_description = (
-                    generate_scene_description(
-                        image=original_image,
-                        vision_model=vision_model,
-                        vision_processor=vision_processor,
-                    )
+            with stage("Gemma scene description", STAGE_TIMEOUT_SECONDS):
+                scene_description = generate_scene_description(
+                    image=original_image,
+                    vision_model=vision_model,
+                    vision_processor=vision_processor,
                 )
-
         except Exception as exc:
 
             print(
@@ -1528,33 +1517,9 @@ if count < LIMIT_IMAGES:
 
     raise SystemExit(2)
 
-
-# ============================================================
-# Release generation models
-# ============================================================
-
-with stage(
-    "Release generation models",
-    STAGE_TIMEOUT_SECONDS,
-):
-
-    try:
-
-        if vision_model is not None:
-            del vision_model
-
-        if vision_processor is not None:
-            del vision_processor
-
-        if pipe is not None:
-            del pipe
-
-        if evaluators is not None:
-            del evaluators
-
-    except Exception:
-        pass
-
+with stage("Release generation models", STAGE_TIMEOUT_SECONDS):
+    unload_watermark_tools()
+    del vision_model, vision_processor, pipe, evaluators
     cleanup()
 
 
