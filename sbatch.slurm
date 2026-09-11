@@ -112,7 +112,7 @@ export EXPECTED_PYTORCH_CUDA=12.8
 # Current AsusL40 snapshot:
 # GPU 2 has the most free VRAM.
 #
-SELECTED_GPU=2
+SELECTED_GPU=4
 REQUIRED_VRAM=24576
 
 
