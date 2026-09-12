@@ -1,0 +1,14 @@
+# Rescue-domain YOLO class map for SDQM auto-labeling (Phase 2).
+# Copied into each exported YOLO dataset with an absolute path field.
+
+path: .
+train: images/train
+val: images/train
+
+nc: 5
+names:
+  0: firefighter
+  1: rescue_boat
+  2: helicopter
+  3: ambulance
+  4: emergency_vehicle
