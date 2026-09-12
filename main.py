@@ -156,33 +156,13 @@ def print_gpu_memory_detailed(label: str) -> None:
         print("PyTorch CUDA unavailable")
 
 
-def release_object(obj):
-    """
-    Delete an object if present and aggressively clean CUDA memory.
-    """
-    if obj is None:
-        return None
-
-    try:
-        del obj
-    except Exception:
-        pass
-
-    cleanup_cuda()
-
-    return None
-
-
 # ============================================================
 # Gemma loading
 # ============================================================
 
 def load_gemma_model():
     """
-    Load Gemma only when it is actually required.
-
-    Keeping Gemma lazy-loaded prevents Gemma from occupying GPU
-    memory while FLUX is being initialized/generating.
+    Load Gemma once when the first eligible image is processed.
     """
     print("Loading Gemma...")
 
@@ -199,33 +179,6 @@ def load_gemma_model():
     )
 
     return model, processor
-
-
-def release_gemma(
-    vision_model,
-    vision_processor,
-):
-    """
-    Completely release Gemma after prompt generation.
-
-    We intentionally delete the model instead of relying only on
-    torch.cuda.empty_cache(), because empty_cache() cannot release
-    tensors still referenced by vision_model.
-    """
-    print(
-        "Releasing Gemma before FLUX..."
-    )
-
-    del vision_model
-    del vision_processor
-
-    cleanup_cuda()
-
-    print_gpu_memory(
-        "GPU after Gemma release"
-    )
-
-    return None, None
 
 
 # ============================================================
@@ -1152,24 +1105,9 @@ for img_key, img_info in data.items():
 
 
         # ====================================================
-        # RELEASE GEMMA
-        #
-        # No FLUX can be initialized until Gemma is released.
-        # ====================================================
-
-        (
-            vision_model,
-            vision_processor,
-        ) = release_gemma(
-            vision_model,
-            vision_processor,
-        )
-
-
-        # ====================================================
         # Load FLUX lazily
         #
-        # FLUX is loaded ONLY after Gemma has been released.
+        # Gemma and FLUX remain loaded for the generation loop.
         # ====================================================
 
         if pipe is None:

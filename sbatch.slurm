@@ -6,8 +6,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=mps:a100:2
-#SBATCH --mem=12G
-#SBATCH --time=24:00:00
+#SBATCH --mem=20G
+#SBATCH --time=72:00:00
 
 set -euo pipefail
 
@@ -343,7 +343,7 @@ echo "============================================================"
 
 run_step \
     "Pipeline" \
-    timeout 23h \
+    timeout 72h \
     "$PYTHON" \
     main.py
 
@@ -362,4 +362,3 @@ echo "Node   : $SLURMD_NODENAME"
 echo "GPU    : $CUDA_VISIBLE_DEVICES"
 
 echo "============================================================"
-

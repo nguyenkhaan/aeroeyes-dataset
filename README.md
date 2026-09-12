@@ -55,9 +55,10 @@ sbatch sbatch.slurm
 
 ## Runtime limits and hang diagnostics
 
-The default Slurm allocation is **24 hours**, controlled by `#SBATCH --time`.
+The default Slurm allocation is **72 hours**, controlled by `#SBATCH --time`,
+with 20 GB of system memory.
 The batch script runs GPU selection, the CUDA allocation/synchronization probe,
-preflight, and the pipeline without shell timeouts. Slow CUDA initialization
+preflight, and the pipeline with a 72-hour shell timeout. Slow CUDA initialization
 can finish without being killed after 120 seconds. Each step logs
 `START`, `END`, or `FAILED`; command failures stop the job. Python logs are
 unbuffered. A stuck CUDA probe can wait until Slurm ends the allocation.
@@ -68,16 +69,17 @@ The Python pipeline retains its own limits:
 
 | Environment variable | Default | Meaning |
 |---|---:|---|
-| `LIMIT_IMAGES` | 1 | Newly accepted images per run |
-| `MAX_ATTEMPTS` | 10 | Images attempted, including download failures and quality rejections |
-| `MAX_CONSECUTIVE_ERRORS` | 3 | Consecutive processing errors before stopping |
-| `GENERATION_TIMEOUT_SECONDS` | 3600 | Stop starting new images after this time, excluding model loading |
+| `LIMIT_IMAGES` | 500 | Newly accepted images per run |
+| `MAX_ATTEMPTS` | `4 × LIMIT_IMAGES` | Images attempted, including download failures and quality rejections |
+| `MAX_CONSECUTIVE_ERRORS` | 10 | Consecutive processing errors before stopping |
+| `GENERATION_TIMEOUT_SECONDS` | 244800 (68 hours) | Stop starting new images after this time |
 | `MODEL_LOAD_TIMEOUT_SECONDS` | 1800 | Each model-loading stage |
 | `STAGE_TIMEOUT_SECONDS` | 900 | Each Gemma, FLUX, quality, or cleanup stage |
 | `EVALUATION_TIMEOUT_SECONDS` | 3600 | Each CMMD/SDQM report stage |
 
-All Python limits must be positive integer seconds/counts and can be placed
-in `.env`. Change Slurm's `--time` to adjust the overall job allocation.
+All Python limits must be non-negative integer seconds/counts and can be placed
+in `.env`; zero disables the corresponding guard. Change Slurm's `--time` and
+the shell timeout together to adjust the overall job allocation.
 
 Each download has a 120-second total watchdog in addition to request retries.
 Python stages log `START`, `END` or `FAILED` with elapsed time. A stuck stage
@@ -92,8 +94,10 @@ Existing output images and ineligible records do not consume attempts.
 A quality rejection or successfully saved image resets the error streak.
 If the target is not reached because of limits or dataset exhaustion,
 the pipeline writes available reports, skips CMMD/SDQM, and exits with code 2.
-After successful generation it releases generation models before bounded
-dataset evaluation. Shell timeout exits are normally 124, or 137 after KILL.
+Gemma and FLUX are each loaded once and reused throughout generation. After
+successful generation, both models are released before bounded dataset
+evaluation. The shell hard timeout is 72 hours; timeout exits are normally
+124, or 137 after KILL.
 
 For a small diagnostic run:
 
