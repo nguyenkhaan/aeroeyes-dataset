@@ -1,4 +1,0 @@
-albumentations
-pycocotools
-numpy
-opencv-python
