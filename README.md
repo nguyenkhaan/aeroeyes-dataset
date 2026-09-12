@@ -93,9 +93,12 @@ uninterruptible I/O; that requires the cluster administrator.
 Existing output images and ineligible records do not consume attempts.
 A quality rejection or successfully saved image resets the error streak.
 If the target is not reached because of limits or dataset exhaustion,
-the pipeline writes available reports, skips CMMD/SDQM, and exits with code 2.
+the pipeline writes per-image reports, runs CMMD/SDQM on available saved images,
+then exits with code 2 to indicate the incomplete generation target. SDQM needs
+at least two real and two synthetic images; with fewer images it writes a
+`skipped` status and reason to `data/output/sdqm/sdqm_report.json`.
 Gemma and FLUX are each loaded once and reused throughout generation. After
-successful generation, both models are released before bounded dataset
+the generation loop ends, both models are released before bounded dataset
 evaluation. The shell hard timeout is 72 hours; timeout exits are normally
 124, or 137 after KILL.
 

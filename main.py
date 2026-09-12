@@ -614,11 +614,23 @@ def run_sdqm_report() -> dict[str, float] | None:
         or len(gen_images) < SDQM_MIN_IMAGES
     ):
 
-        print(
-            "SDQM skipped: need at least "
-            f"{SDQM_MIN_IMAGES} real and "
-            "synthetic images."
+        reason = (
+            f"Need at least {SDQM_MIN_IMAGES} images per side; "
+            f"found real={len(real_images)}, synthetic={len(gen_images)}."
         )
+        print(f"SDQM skipped: {reason}")
+        try:
+            write_sdqm_status_report(
+                SDQM_OUTPUT_DIR,
+                {
+                    "status": "skipped",
+                    "reason": reason,
+                    "real_image_count": len(real_images),
+                    "synthetic_image_count": len(gen_images),
+                },
+            )
+        except OSError as exc:
+            print(f"Could not write SDQM skip report: {exc}")
 
         return None
 
@@ -1434,6 +1446,9 @@ if csv_path:
 # Dataset not completed
 # ============================================================
 
+# Persist per-image metadata before dataset evaluation can fail or time out.
+write_metadata_jsonl(evaluation_records, OUTPUT_DIR)
+
 if count < LIMIT_IMAGES:
 
     stop_reason = (
@@ -1442,18 +1457,12 @@ if count < LIMIT_IMAGES:
         "reaching target"
     )
 
-    write_metadata_jsonl(
-        evaluation_records,
-        OUTPUT_DIR,
-    )
-
     print(
-        f"Stopped: {stop_reason}. "
-        "Dataset evaluation skipped.",
+        f"Generation stopped: {stop_reason}. "
+        f"Generated {count}/{LIMIT_IMAGES} images. "
+        "Continuing CMMD/SDQM evaluation on available saved images.",
         flush=True,
     )
-
-    raise SystemExit(2)
 
 with stage("Release generation models", STAGE_TIMEOUT_SECONDS):
     unload_watermark_tools()
@@ -1513,3 +1522,11 @@ if metadata_jsonl_path:
         f"Metadata JSONL: "
         f"{metadata_jsonl_path}"
     )
+
+if count < LIMIT_IMAGES:
+    print(
+        f"Dataset evaluation finished; generation target was not reached "
+        f"({count}/{LIMIT_IMAGES}): {stop_reason}. Exiting with code 2.",
+        flush=True,
+    )
+    raise SystemExit(2)
