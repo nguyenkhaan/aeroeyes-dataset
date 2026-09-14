@@ -48,6 +48,28 @@ VENV_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
 ```
 
 ### Run code  
+Run the pipeline in two separate jobs. In the final Python command under
+`Run project` in `sbatch.slurm`, change `main.py` to `main_down.py` and submit
+the download job. After it finishes, change it back to `main.py` and submit
+the generation job using the same command below.
+
+`main_down.py` reads `JSON_PATH` (default: `data/input/eccv_train.json`);
+set `JSON_PATH` if your dataset JSON is in the output directory. It downloads
+all records, including those without positive labels, to
+`data/input/download_images/` as lossless RGB PNG files. The original dataset
+keys and metadata (including labels and source URLs) are stored together with
+`downloaded_file` in `data/input/image_summary.json`. Failed downloads or
+invalid images are logged and skipped without stopping the remaining downloads.
+The summary is replaced atomically when the loop finishes or unwinds through
+a Python exception; a forced process kill cannot save the current summary.
+Rerunning this step downloads the dataset again and rebuilds the summary.
+
+`main.py` reads only this summary and the local images, then applies the existing
+positive-label filter, watermark removal, generation, and evaluation steps.
+Missing or unreadable local images are skipped. Downloading does not use the
+generation count/error limits. The existing Slurm GPU checks and preflight
+still run for both jobs.
+
 ```bash 
 mkdir -p logs
 sbatch sbatch.slurm 
@@ -70,7 +92,7 @@ The Python pipeline retains its own limits:
 | Environment variable | Default | Meaning |
 |---|---:|---|
 | `LIMIT_IMAGES` | 500 | Newly accepted images per run |
-| `MAX_ATTEMPTS` | `4 × LIMIT_IMAGES` | Images attempted, including download failures and quality rejections |
+| `MAX_ATTEMPTS` | `4 × LIMIT_IMAGES` | Local images attempted, including quality rejections |
 | `MAX_CONSECUTIVE_ERRORS` | 10 | Consecutive processing errors before stopping |
 | `GENERATION_TIMEOUT_SECONDS` | 244800 (68 hours) | Stop starting new images after this time |
 | `MODEL_LOAD_TIMEOUT_SECONDS` | 1800 | Each model-loading stage |
@@ -81,7 +103,7 @@ All Python limits must be non-negative integer seconds/counts and can be placed
 in `.env`; zero disables the corresponding guard. Change Slurm's `--time` and
 the shell timeout together to adjust the overall job allocation.
 
-Each download has a 120-second total watchdog in addition to request retries.
+Downloads use request timeouts and retries without a process-exiting watchdog.
 Python stages log `START`, `END` or `FAILED` with elapsed time. A stuck stage
 dumps thread tracebacks to `.err` and immediately exits with code 1 using
 [Python's faulthandler watchdog](https://docs.python.org/3/library/faulthandler.html#dumping-the-tracebacks-after-a-timeout).

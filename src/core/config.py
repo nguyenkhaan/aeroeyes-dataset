@@ -74,6 +74,8 @@ OUTPUT_DIR = os.getenv(
     "OUTPUT_DIR",
     str(PROJECT_ROOT / "data" / "output"),
 )
+DOWNLOAD_IMAGES_DIR = PROJECT_ROOT / "data" / "input" / "download_images"
+IMAGE_SUMMARY_PATH = PROJECT_ROOT / "data" / "input" / "image_summary.json"
 REAL_IMAGES_DIR = os.getenv(
     "REAL_IMAGES_DIR",
     str(PROJECT_ROOT / "data" / "real_reference"),

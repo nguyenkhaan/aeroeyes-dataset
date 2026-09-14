@@ -3,7 +3,6 @@ import json
 import os
 import re
 import traceback
-from io import BytesIO
 from time import monotonic
 
 import pandas as pd
@@ -15,11 +14,11 @@ from diffusers.pipelines.flux2.pipeline_flux2_klein import (
 
 from src.core.config import (
     BASE_SEED,
-    DOWNLOAD_RETRIES,
+    DOWNLOAD_IMAGES_DIR,
+    IMAGE_SUMMARY_PATH,
     FLUX_MODEL,
     GEN_IMAGES_DIR,
     GUIDANCE_SCALE,
-    HEADERS,
     HF_HUB_CACHE,
     HF_TOKEN,
     IMAGE_SIZE,
@@ -33,7 +32,6 @@ from src.core.config import (
     NUM_INFERENCE_STEPS,
     OUTPUT_DIR,
     REAL_IMAGES_DIR,
-    REQUEST_TIMEOUT,
     SDQM_ENABLED,
     SDQM_MIN_IMAGES,
     SDQM_OUTPUT_DIR,
@@ -58,7 +56,6 @@ from src.evaluation import (
 )
 from src.generation.gemma import loading_model as loading_gemma
 from src.helper.image import (
-    download_image,
     generate_rescue_image,
     resize_center_crop,
     save_generated_image,
@@ -767,7 +764,7 @@ with stage(
 
     random_seed()
 
-    data = load()
+    data = load(IMAGE_SUMMARY_PATH)
 
 
 count = 0
@@ -912,80 +909,24 @@ for img_key, img_info in data.items():
             continue
 
 
-        # ====================================================
-        # URL
-        # ====================================================
-
         url = img_info.get("url")
+        image_name = img_info.get("downloaded_file")
 
-
-        if not url:
-
-            print(
-                "Skip: Missing URL"
-            )
-
+        if not isinstance(image_name, str) or os.path.basename(image_name) != image_name:
+            print(f"Skip: {img_key} (Invalid downloaded filename)")
             skipped += 1
-
             continue
 
+        image_path = os.path.join(DOWNLOAD_IMAGES_DIR, image_name)
+        try:
+            with Image.open(image_path) as downloaded_image:
+                original_image = downloaded_image.convert("RGB")
+        except Exception as exc:
+            print(f"Skip unavailable downloaded image: {img_key}: {exc}")
+            skipped += 1
+            continue
 
         attempts += 1
-
-
-        # ====================================================
-        # Download
-        # ====================================================
-
-        with stage(
-            "Download image",
-            REQUEST_TIMEOUT
-            * (DOWNLOAD_RETRIES + 1),
-        ):
-
-            content = download_image(
-                url,
-                headers=HEADERS,
-                timeout=REQUEST_TIMEOUT,
-                retries=DOWNLOAD_RETRIES,
-            )
-
-
-        if content is None:
-
-            print(
-                "Skip: Download Failed"
-            )
-
-            consecutive_errors += 1
-            skipped += 1
-
-            continue
-
-
-        # ====================================================
-        # Decode image
-        # ====================================================
-
-        try:
-
-            original_image = (
-                Image.open(
-                    BytesIO(content)
-                )
-                .convert("RGB")
-            )
-
-        except Exception as exc:
-
-            print(
-                f"Skip Invalid Image: {exc}"
-            )
-
-            consecutive_errors += 1
-            skipped += 1
-
-            continue
 
         if WATERMARK_REMOVAL_ENABLED:
 
