@@ -55,11 +55,14 @@ the generation job using the same command below.
 
 `main_down.py` reads `JSON_PATH` (default: `data/input/eccv_train.json`);
 set `JSON_PATH` if your dataset JSON is in the output directory. It downloads
-all records, including those without positive labels, to
+all records with at least one positive disaster label (`incidents` value `1`) to
 `data/input/download_images/` as lossless RGB PNG files. The original dataset
 keys and metadata (including labels and source URLs) are stored together with
 `downloaded_file` in `data/input/image_summary.json`. Failed downloads or
 invalid images are logged and skipped without stopping the remaining downloads.
+Records with missing or empty `incidents`, or no value equal to `1`, are skipped
+before downloading and are not included in the summary. Every download run scans
+the entire JSON; `LIMIT_IMAGES` applies only to AI generation in `main.py`.
 The summary is replaced atomically when the loop finishes or unwinds through
 a Python exception; a forced process kill cannot save the current summary.
 Rerunning this step downloads the dataset again and rebuilds the summary.

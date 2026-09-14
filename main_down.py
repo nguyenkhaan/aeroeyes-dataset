@@ -20,11 +20,18 @@ def main() -> None:
     DOWNLOAD_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     summary = {}
     failed = 0
+    skipped = 0
 
     try:
         for image_key, image_info in data.items():
-            print(f"Downloading: {image_key}", flush=True)
             try:
+                incidents = image_info.get("incidents") or {}
+                if not any(value == 1 for value in incidents.values()):
+                    skipped += 1
+                    print(f"Skip: {image_key} (No Positive Labels)", flush=True)
+                    continue
+
+                print(f"Downloading: {image_key}", flush=True)
                 url = image_info.get("url")
                 if not url:
                     raise ValueError("Missing URL")
@@ -60,7 +67,10 @@ def main() -> None:
             json.dump(summary, summary_file, ensure_ascii=False, indent=2)
             summary_file.write("\n")
         temporary_summary_path.replace(IMAGE_SUMMARY_PATH)
-        print(f"Downloaded: {len(summary)} | Failed: {failed}", flush=True)
+        print(
+            f"Downloaded: {len(summary)} | Failed: {failed} | No positive labels: {skipped}",
+            flush=True,
+        )
         print(f"Image summary: {IMAGE_SUMMARY_PATH}", flush=True)
 
 
