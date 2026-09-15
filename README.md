@@ -67,6 +67,16 @@ The summary is replaced atomically when the loop finishes or unwinds through
 a Python exception; a forced process kill cannot save the current summary.
 Rerunning this step downloads the dataset again and rebuilds the summary.
 
+If the download job was interrupted, run `python main_label.py` to rebuild
+`data/input/image_summary.json` from the images already on disk without
+downloading them again. Alternatively, replace `main.py` with `main_label.py`
+in the final Python command in `sbatch.slurm`. Use the same `JSON_PATH` dataset
+as the download job: the script matches each original key to its SHA-256 PNG
+filename, keeps only positive-label records with readable images, and preserves
+their metadata and source URLs. It scans the full JSON regardless of
+`LIMIT_IMAGES` and atomically replaces any existing summary after the scan.
+Temporary `.tmp` images are ignored. After recovery, run `main.py` as usual.
+
 `main.py` reads only this summary and the local images, then applies the existing
 positive-label filter, watermark removal, generation, and evaluation steps.
 Missing or unreadable local images are skipped. Downloading does not use the
