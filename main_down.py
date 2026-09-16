@@ -18,6 +18,7 @@ from src.helper.loading_dataset import loading_dataset
 def main() -> None:
     data = loading_dataset()
     DOWNLOAD_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    IMAGE_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
     summary = {}
     failed = 0
     skipped = 0

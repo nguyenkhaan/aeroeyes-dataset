@@ -1,67 +1,25 @@
-import gc
+"""Prepare prompts, then generate images with one resident model per phase."""
+import hashlib
 import json
-import os
-import re
-import traceback
+from pathlib import Path
 from time import monotonic
 
-import pandas as pd
 import torch
 from PIL import Image
-from diffusers.pipelines.flux2.pipeline_flux2_klein import (
-    Flux2KleinPipeline,
-)
 
 from src.core.config import (
-    BASE_SEED,
-    DOWNLOAD_IMAGES_DIR,
-    IMAGE_SUMMARY_PATH,
-    FLUX_MODEL,
-    GEN_IMAGES_DIR,
-    GUIDANCE_SCALE,
-    HF_HUB_CACHE,
-    HF_TOKEN,
-    IMAGE_SIZE,
-    LIMIT_IMAGES,
-    MAX_ATTEMPTS,
-    MAX_CONSECUTIVE_ERRORS,
-    GENERATION_TIMEOUT_SECONDS,
-    MODEL_LOAD_TIMEOUT_SECONDS,
-    STAGE_TIMEOUT_SECONDS,
-    EVALUATION_TIMEOUT_SECONDS,
-    NUM_INFERENCE_STEPS,
-    OUTPUT_DIR,
-    REAL_IMAGES_DIR,
-    SDQM_ENABLED,
-    SDQM_MIN_IMAGES,
-    SDQM_OUTPUT_DIR,
-    SDQM_VINFO_ENABLED,
-    SDQM_YOLO_EXPORT,
-    WATERMARK_REMOVAL_ENABLED,
+    BASE_SEED, DOWNLOAD_IMAGES_DIR, GENERATION_TIMEOUT_SECONDS,
+    GEN_IMAGES_DIR, GUIDANCE_SCALE, IMAGE_SIZE, IMAGE_SUMMARY_PATH,
+    LIMIT_IMAGES, MAX_ATTEMPTS, MAX_CONSECUTIVE_ERRORS,
+    MODEL_LOAD_TIMEOUT_SECONDS, NUM_INFERENCE_STEPS, OUTPUT_DIR,
+    REAL_IMAGES_DIR, STAGE_TIMEOUT_SECONDS, WATERMARK_REMOVAL_ENABLED,
     random_seed,
 )
-from src.evaluation import (
-    QualityEvaluators,
-    attach_sdqm_metadata,
-    check_custom_ultralytics,
-    compute_dataset_cmmd,
-    compute_dataset_sdqm,
-    compute_o_score,
-    compute_ssim,
-    evaluate_quality,
-    load_evaluators,
-    passes_quality_gate,
-    write_sdqm_status_report,
-    write_metadata_jsonl,
-)
+from src.generation.flux import loading_model as loading_flux
 from src.generation.gemma import loading_model as loading_gemma
-from src.helper.image import (
-    generate_rescue_image,
-    resize_center_crop,
-    save_generated_image,
-)
-from src.helper.loading_dataset import loading_dataset as load
-from src.helper.memory import cleanup
+from src.helper.image import generate_rescue_image, resize_center_crop
+from src.helper.loading_dataset import loading_dataset
+from src.helper.memory import cleanup as cleanup_cuda
 from src.helper.runtime import stage
 from src.helper.watermark import remove_watermark, unload_watermark_tools
 from src.vision import build_flux_prompt
@@ -69,245 +27,41 @@ from src.vision.rescue_instruction import generate_rescue_instruction
 from src.vision.scene_description import generate_scene_description
 
 
-print("Hello, Cloudian 💙 Cloud")
+def write_json(path: Path, record: dict) -> None:
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
 
-for directory in (
-    OUTPUT_DIR,
-    REAL_IMAGES_DIR,
-    GEN_IMAGES_DIR,
-):
-    os.makedirs(directory, exist_ok=True)
+def save_image(image: Image.Image, path: Path) -> None:
+    temporary = path.with_suffix(".tmp")
+    image.save(temporary, format="PNG")
+    temporary.replace(path)
 
 
-# ============================================================
-# Memory helpers
-# ============================================================
-
-def cleanup_cuda() -> None:
-    """
-    Release Python garbage and unused CUDA allocator memory.
-    """
-    gc.collect()
-
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+def budget_exhausted(started: float) -> bool:
+    return GENERATION_TIMEOUT_SECONDS > 0 and monotonic() - started >= GENERATION_TIMEOUT_SECONDS
 
 
-def print_gpu_memory(label: str) -> None:
-    """
-    Print current PyTorch CUDA memory usage.
-    """
-    if not torch.cuda.is_available():
-        print(f"{label}: CUDA unavailable")
-        return
+def error_limit_reached(errors: int) -> bool:
+    return MAX_CONSECUTIVE_ERRORS > 0 and errors >= MAX_CONSECUTIVE_ERRORS
 
-    allocated = (
-        torch.cuda.memory_allocated() / 1024**3
-    )
-
-    reserved = (
-        torch.cuda.memory_reserved() / 1024**3
-    )
-
-    print(
-        f"{label}: "
-        f"allocated={allocated:.2f} GB | "
-        f"reserved={reserved:.2f} GB"
-    )
-
-
-def print_gpu_memory_detailed(label: str) -> None:
-    """
-    Print PyTorch memory and nvidia-smi-visible memory.
-    """
-    print()
-    print("=" * 80)
-    print(label)
-    print("=" * 80)
-
-    if torch.cuda.is_available():
-
-        allocated = (
-            torch.cuda.memory_allocated()
-            / 1024**3
-        )
-
-        reserved = (
-            torch.cuda.memory_reserved()
-            / 1024**3
-        )
-
-        print(
-            f"PyTorch allocated : "
-            f"{allocated:.2f} GB"
-        )
-
-        print(
-            f"PyTorch reserved  : "
-            f"{reserved:.2f} GB"
-        )
-
-    else:
-        print("PyTorch CUDA unavailable")
-
-
-# ============================================================
-# Gemma loading
-# ============================================================
 
 def load_gemma_model():
-    """
-    Load Gemma once when the first eligible image is processed.
-    """
-    print("Loading Gemma...")
+    with stage("Load Gemma", MODEL_LOAD_TIMEOUT_SECONDS):
+        return loading_gemma()
 
-    cleanup_cuda()
-
-    with stage(
-        "Load Gemma",
-        MODEL_LOAD_TIMEOUT_SECONDS,
-    ):
-        model, processor = loading_gemma()
-
-    print_gpu_memory(
-        "GPU after Gemma load"
-    )
-
-    return model, processor
-
-
-# ============================================================
-# FLUX loading
-# ============================================================
 
 def load_flux_memory_safe():
-    """
-    Load FLUX without moving the entire model to CUDA.
+    with stage("Load resident FLUX", MODEL_LOAD_TIMEOUT_SECONDS):
+        return loading_flux()
 
-    Diffusers CPU offload keeps model weights on CPU and moves only
-    the required components to GPU during execution.
 
-    This avoids the large CUDA allocation caused by:
-        pipe.to("cuda")
-    """
-    cleanup_cuda()
-
-    print("=" * 60)
-    print(f"Loading {FLUX_MODEL}")
-    print("dtype: torch.bfloat16")
-    print("mode: CPU offload")
-    print("=" * 60)
-
-    pipe = Flux2KleinPipeline.from_pretrained(
-        FLUX_MODEL,
-        torch_dtype=torch.bfloat16,
-        token=HF_TOKEN or None,
-        cache_dir=str(HF_HUB_CACHE),
-    )
-
-    # --------------------------------------------------------
-    # Prefer model CPU offload.
-    #
-    # This keeps the majority of model weights on CPU and moves
-    # components to GPU only when needed.
-    # --------------------------------------------------------
-
-    try:
-        pipe.enable_model_cpu_offload()
-
-        print(
-            "FLUX CPU offload enabled."
-        )
-
-    except Exception as exc:
-
-        print(
-            "WARNING: model CPU offload failed:"
-            f" {type(exc).__name__}: {exc}"
-        )
-
-        # ----------------------------------------------------
-        # Fallback to sequential offload.
-        #
-        # Sequential offload is slower but uses less VRAM.
-        # ----------------------------------------------------
-
+def generate_flux_safe(pipe, original_image: Image.Image, flux_prompt: str, count: int):
+    for attempt in range(2):
         try:
-
-            pipe.enable_sequential_cpu_offload()
-
-            print(
-                "FLUX sequential CPU offload enabled."
-            )
-
-        except Exception as fallback_exc:
-
-            print(
-                "ERROR: FLUX CPU offload unavailable:"
-                f" {type(fallback_exc).__name__}: "
-                f"{fallback_exc}"
-            )
-
-            del pipe
-            cleanup_cuda()
-
-            raise
-
-
-    pipe.set_progress_bar_config(
-        disable=False,
-    )
-
-    cleanup_cuda()
-
-    print_gpu_memory(
-        "GPU after FLUX initialization"
-    )
-
-    print("=" * 60)
-    print("FLUX Loaded Successfully")
-    print("=" * 60)
-
-    return pipe
-
-
-# ============================================================
-# Safe FLUX generation
-# ============================================================
-
-def generate_flux_safe(
-    pipe,
-    original_image: Image.Image,
-    flux_prompt: str,
-    count: int,
-):
-    """
-    Generate an image with OOM recovery.
-
-    Normal execution uses the offloaded FLUX pipeline.
-
-    On OOM:
-      1. Release temporary CUDA memory.
-      2. Retry once.
-      3. Let the caller handle a second failure.
-    """
-
-    cleanup_cuda()
-
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats()
-
-    try:
-
-        with stage(
-            "FLUX generation",
-            STAGE_TIMEOUT_SECONDS,
-        ):
-
-            generated_image = (
-                generate_rescue_image(
+            with stage("FLUX generation", STAGE_TIMEOUT_SECONDS):
+                return generate_rescue_image(
                     pipe=pipe,
                     image=original_image,
                     prompt=flux_prompt,
@@ -315,1159 +69,184 @@ def generate_flux_safe(
                     num_inference_steps=NUM_INFERENCE_STEPS,
                     seed=BASE_SEED + count,
                 )
-            )
-
-        print_gpu_memory(
-            "GPU after FLUX generation"
-        )
-
-        if torch.cuda.is_available():
-            peak = (
-                torch.cuda.max_memory_allocated()
-                / 1024**3
-            )
-
-            print(
-                f"FLUX peak allocated: "
-                f"{peak:.2f} GB"
-            )
-
-        return generated_image
-
-    except torch.cuda.OutOfMemoryError:
-
-        print()
-        print(
-            "FLUX CUDA Out Of Memory."
-        )
-
-        cleanup_cuda()
-
-        print_gpu_memory(
-            "GPU after FLUX OOM"
-        )
-
-        # ----------------------------------------------------
-        # Retry once after cleanup.
-        # ----------------------------------------------------
-
-        print(
-            "Retrying FLUX generation "
-            "after CUDA cleanup..."
-        )
-
-        cleanup_cuda()
-
-        try:
-
-            with stage(
-                "FLUX generation retry",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-
-                generated_image = (
-                    generate_rescue_image(
-                        pipe=pipe,
-                        image=original_image,
-                        prompt=flux_prompt,
-                        guidance_scale=GUIDANCE_SCALE,
-                        num_inference_steps=NUM_INFERENCE_STEPS,
-                        seed=BASE_SEED + count,
-                    )
-                )
-
-            print(
-                "FLUX retry succeeded."
-            )
-
-            return generated_image
-
         except torch.cuda.OutOfMemoryError:
-
-            print(
-                "FLUX retry also failed with "
-                "CUDA Out Of Memory."
-            )
-
-            cleanup_cuda()
-
-            raise
+            if attempt == 1:
+                raise
+            print("FLUX OOM; releasing failed-call tensors before one retry.", flush=True)
+        # The exception traceback must be gone before collecting its tensors.
+        cleanup_cuda()
 
 
-# ============================================================
-# Utility
-# ============================================================
-
-def make_safe_stem(image_key: str) -> str:
-    """
-    Build a filesystem-safe stem from the full dataset key.
-
-    Using the full key avoids collisions between samples that share
-    the same basename in different folders.
-    """
-    normalized_key = (
-        image_key
-        .replace("/", "_")
-        .replace("\\", "_")
-    )
-
-    return re.sub(
-        r"[^a-zA-Z0-9]+",
-        "_",
-        normalized_key,
-    ).strip("_")
-
-
-def save_reference_images(
-    safe_name: str,
-    original_image: Image.Image,
-    generated_image: Image.Image,
-) -> None:
-
-    original_image.save(
-        os.path.join(
-            REAL_IMAGES_DIR,
-            f"{safe_name}_real.jpg",
-        ),
-        quality=95,
-    )
-
-    generated_image.save(
-        os.path.join(
-            GEN_IMAGES_DIR,
-            f"{safe_name}_gen.jpg",
-        ),
-        quality=95,
-    )
-
-
-def export_evaluation_report(
-    records: list[dict],
-) -> str | None:
-
-    if not records:
+def completed_sample(stem: str) -> dict | None:
+    metadata_path = Path(OUTPUT_DIR) / "_metadata" / f"{stem}.json"
+    if not metadata_path.is_file():
         return None
-
-    df = pd.DataFrame(records)
-
-    csv_path = os.path.join(
-        OUTPUT_DIR,
-        "evaluation_report.csv",
-    )
-
-    df.to_csv(
-        csv_path,
-        index=False,
-    )
-
-    metric_cols = [
-        "sc_score",
-        "pq_score",
-        "o_score",
-        "ssim",
-    ]
-
-    print("\nMetric summary:")
-    print(df[metric_cols].describe())
-
-    return csv_path
+    record = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if all(Path(record[key]).is_file() for key in (
+        "output_path", "reference_path", "generated_reference_path",
+    )):
+        return record
+    return None
 
 
-# ============================================================
-# CMMD
-# ============================================================
-
-def run_cmmd_report() -> float | None:
-
-    if not os.path.isdir(REAL_IMAGES_DIR):
-        return None
-
-    if not os.path.isdir(GEN_IMAGES_DIR):
-        return None
-
-    real_images = [
-        name
-        for name in os.listdir(REAL_IMAGES_DIR)
-        if name.lower().endswith(
-            (".jpg", ".jpeg", ".png")
-        )
-    ]
-
-    gen_images = [
-        name
-        for name in os.listdir(GEN_IMAGES_DIR)
-        if name.lower().endswith(
-            (".jpg", ".jpeg", ".png")
-        )
-    ]
-
-    if not real_images or not gen_images:
-        return None
-
-    print("Computing CMMD score...")
-
-    cleanup()
-
+def prepare_samples(data: dict, started: float) -> list[dict]:
+    records = []
+    model = processor = None
+    attempts = errors = 0
+    prepared_dir = Path(OUTPUT_DIR) / "_prepared"
     try:
-
-        cmmd_score = compute_dataset_cmmd(
-            ref_dir=REAL_IMAGES_DIR,
-            eval_dir=GEN_IMAGES_DIR,
-        )
-
-        print(
-            f"CMMD Score: {cmmd_score:.4f}"
-        )
-
-        return cmmd_score
-
-    except Exception as exc:
-
-        print(
-            f"CMMD calculation failed: {exc}"
-        )
-
-        return None
-
-
-# ============================================================
-# SDQM failure report
-# ============================================================
-
-def write_sdqm_failure_report(
-    reason: str,
-    real_image_count: int,
-    synthetic_image_count: int,
-) -> None:
-
-    try:
-
-        report_path = (
-            write_sdqm_status_report(
-                SDQM_OUTPUT_DIR,
-                {
-                    "status": "failed",
-                    "reason": reason,
-                    "real_image_count":
-                        real_image_count,
-                    "synthetic_image_count":
-                        synthetic_image_count,
-                },
-            )
-        )
-
-        print(
-            f"SDQM failure report: "
-            f"{report_path.resolve()}"
-        )
-
-    except OSError as exc:
-
-        print(
-            f"Could not write SDQM failure report: "
-            f"{exc}"
-        )
-
-
-# ============================================================
-# SDQM
-# ============================================================
-
-def run_sdqm_report() -> dict[str, float] | None:
-
-    if not SDQM_ENABLED:
-
-        print(
-            "SDQM disabled "
-            "(SDQM_ENABLED=false)."
-        )
-
-        return None
-
-    if not os.path.isdir(REAL_IMAGES_DIR):
-        return None
-
-    if not os.path.isdir(GEN_IMAGES_DIR):
-        return None
-
-    real_images = [
-        name
-        for name in os.listdir(REAL_IMAGES_DIR)
-        if name.lower().endswith(
-            (".jpg", ".jpeg", ".png")
-        )
-    ]
-
-    gen_images = [
-        name
-        for name in os.listdir(GEN_IMAGES_DIR)
-        if name.lower().endswith(
-            (".jpg", ".jpeg", ".png")
-        )
-    ]
-
-    if (
-        len(real_images) < SDQM_MIN_IMAGES
-        or len(gen_images) < SDQM_MIN_IMAGES
-    ):
-
-        reason = (
-            f"Need at least {SDQM_MIN_IMAGES} images per side; "
-            f"found real={len(real_images)}, synthetic={len(gen_images)}."
-        )
-        print(f"SDQM skipped: {reason}")
-        try:
-            write_sdqm_status_report(
-                SDQM_OUTPUT_DIR,
-                {
-                    "status": "skipped",
-                    "reason": reason,
-                    "real_image_count": len(real_images),
-                    "synthetic_image_count": len(gen_images),
-                },
-            )
-        except OSError as exc:
-            print(f"Could not write SDQM skip report: {exc}")
-
-        return None
-
-
-    print("Computing SDQM metrics...")
-
-
-    if SDQM_YOLO_EXPORT:
-
-        print(
-            "YOLO auto-labeling enabled "
-            "(Grounding DINO)."
-        )
-
-
-    if SDQM_VINFO_ENABLED:
-
-        (
-            ultralytics_ready,
-            ultralytics_message,
-        ) = check_custom_ultralytics()
-
-        if ultralytics_ready:
-
-            print(
-                "V-Info enabled "
-                "(custom ultralytics detected)."
-            )
-
-        else:
-
-            print(
-                "V-Info will be skipped: "
-                f"{ultralytics_message}"
-            )
-
-
-    cleanup()
-
-
-    try:
-
-        sdqm_metrics = compute_dataset_sdqm(
-            ref_dir=REAL_IMAGES_DIR,
-            eval_dir=GEN_IMAGES_DIR,
-        )
-
-        print("SDQM metrics:")
-
-        for (
-            metric_name,
-            metric_value,
-        ) in sorted(
-            sdqm_metrics.items()
-        ):
-
-            print(
-                f"  {metric_name}: "
-                f"{metric_value:.4f}"
-            )
-
-        return sdqm_metrics
-
-
-    except FileNotFoundError as exc:
-
-        reason = (
-            f"SDQM setup incomplete: {exc}"
-        )
-
-        print(reason)
-
-        write_sdqm_failure_report(
-            reason,
-            len(real_images),
-            len(gen_images),
-        )
-
-        return None
-
-
-    except Exception as exc:
-
-        reason = (
-            f"SDQM calculation failed: {exc}"
-        )
-
-        print(reason)
-
-        write_sdqm_failure_report(
-            reason,
-            len(real_images),
-            len(gen_images),
-        )
-
-        return None
-
-
-# ============================================================
-# Initialize
-# ============================================================
-
-data = None
-
-vision_model = None
-vision_processor = None
-pipe = None
-
-#
-# Quality evaluators are CPU-only.
-#
-# This is intentional.
-#
-with stage(
-    "Load quality evaluators",
-    MODEL_LOAD_TIMEOUT_SECONDS,
-):
-
-    evaluators: QualityEvaluators = (
-        load_evaluators(
-            device="cpu"
-        )
-    )
-
-
-# ============================================================
-# Dataset
-# ============================================================
-
-with stage(
-    "Dataset initialization",
-    STAGE_TIMEOUT_SECONDS,
-):
-
-    random_seed()
-
-    data = load(IMAGE_SUMMARY_PATH)
-
-
-count = 0
-skipped = 0
-attempts = 0
-consecutive_errors = 0
-stop_reason = None
-
-generation_started = monotonic()
-
-evaluation_records = []
-
-metadata_dir = os.path.join(
-    OUTPUT_DIR,
-    "_metadata",
-)
-
-os.makedirs(
-    metadata_dir,
-    exist_ok=True,
-)
-
-
-print("=" * 80)
-print(
-    f"Pipeline started - target: "
-    f"{LIMIT_IMAGES} images"
-)
-print("=" * 80)
-
-
-# ============================================================
-# Main pipeline
-# ============================================================
-
-for img_key, img_info in data.items():
-
-    if count >= LIMIT_IMAGES:
-        break
-
-
-    if MAX_ATTEMPTS > 0 and attempts >= MAX_ATTEMPTS:
-
-        stop_reason = (
-            f"MAX_ATTEMPTS reached ({attempts})"
-        )
-
-        break
-
-
-    if (
-        MAX_CONSECUTIVE_ERRORS > 0
-        and consecutive_errors >= MAX_CONSECUTIVE_ERRORS
-    ):
-
-        stop_reason = (
-            "MAX_CONSECUTIVE_ERRORS reached "
-            f"({consecutive_errors})"
-        )
-
-        break
-
-
-    if (
-        GENERATION_TIMEOUT_SECONDS > 0
-        and monotonic() - generation_started >= GENERATION_TIMEOUT_SECONDS
-    ):
-
-        stop_reason = (
-            "Generation time budget exhausted"
-        )
-
-        break
-
-
-    print("=" * 80)
-    print(f"Processing: {img_key}")
-    print("=" * 80)
-
-
-    original_image = None
-    generated_image = None
-    scene_description = None
-    rescue_instruction = None
-    flux_prompt = None
-
-
-    try:
-
-        # ====================================================
-        # Positive labels
-        # ====================================================
-
-        incidents = img_info.get(
-            "incidents",
-            {},
-        )
-
-        positive_incidents = [
-            incident
-            for incident, value
-            in incidents.items()
-            if value == 1
-        ]
-
-
-        if not positive_incidents:
-
-            print(
-                f"Skip: {img_key} "
-                "(No Positive Labels)"
-            )
-
-            skipped += 1
-
-            continue
-
-
-        # ====================================================
-        # Output
-        # ====================================================
-
-        safe_name = make_safe_stem(
-            img_key
-        )
-
-        output_path = os.path.join(
-            OUTPUT_DIR,
-            f"{safe_name}.png",
-        )
-
-
-        if os.path.exists(output_path):
-
-            print(
-                f"Skip: {img_key} "
-                "(Already Generated)"
-            )
-
-            skipped += 1
-
-            continue
-
-
-        url = img_info.get("url")
-        image_name = img_info.get("downloaded_file")
-
-        if not isinstance(image_name, str) or os.path.basename(image_name) != image_name:
-            print(f"Skip: {img_key} (Invalid downloaded filename)")
-            skipped += 1
-            continue
-
-        image_path = os.path.join(DOWNLOAD_IMAGES_DIR, image_name)
-        try:
-            with Image.open(image_path) as downloaded_image:
-                original_image = downloaded_image.convert("RGB")
-        except Exception as exc:
-            print(f"Skip unavailable downloaded image: {img_key}: {exc}")
-            skipped += 1
-            continue
-
-        attempts += 1
-
-        if WATERMARK_REMOVAL_ENABLED:
-
+        for image_key, info in data.items():
+            if len(records) >= LIMIT_IMAGES or budget_exhausted(started):
+                break
+            if error_limit_reached(errors):
+                print("Preparation stopped: MAX_CONSECUTIVE_ERRORS reached.", flush=True)
+                break
+            if not isinstance(info, dict):
+                continue
+            incidents = info.get("incidents") or {}
+            if not isinstance(incidents, dict):
+                continue
+            labels = [name for name, value in incidents.items() if value == 1]
+            if not labels:
+                continue
+            stem = hashlib.sha256(image_key.encode("utf-8")).hexdigest()
             try:
-
-                with stage(
-                    "Watermark removal",
-                    STAGE_TIMEOUT_SECONDS,
-                ):
-
-                    original_image = remove_watermark(
-                        original_image
-                    )
-
+                completed = completed_sample(stem)
+                if completed is not None:
+                    records.append(completed)
+                    errors = 0
+                    continue
+                prepared_path = prepared_dir / f"{stem}.json"
+                reference_path = prepared_dir / f"{stem}.png"
+                if prepared_path.is_file() and reference_path.is_file():
+                    record = json.loads(prepared_path.read_text(encoding="utf-8"))
+                    if record.get("image_size") == IMAGE_SIZE:
+                        records.append(record)
+                        errors = 0
+                        continue
+                if MAX_ATTEMPTS > 0 and attempts >= MAX_ATTEMPTS:
+                    print("Preparation stopped: MAX_ATTEMPTS reached.", flush=True)
+                    break
+                attempts += 1
+                filename = info.get("downloaded_file")
+                if not isinstance(filename, str) or Path(filename).name != filename:
+                    raise ValueError("Invalid downloaded filename")
+                with Image.open(DOWNLOAD_IMAGES_DIR / filename) as downloaded:
+                    original = downloaded.convert("RGB")
+                if WATERMARK_REMOVAL_ENABLED:
+                    try:
+                        with stage("Watermark removal", STAGE_TIMEOUT_SECONDS):
+                            original = remove_watermark(original)
+                    except torch.cuda.OutOfMemoryError:
+                        raise
+                    except Exception as exc:
+                        print(f"Watermark removal skipped: {exc}", flush=True)
+                original = resize_center_crop(original, IMAGE_SIZE)
+                if model is None:
+                    model, processor = load_gemma_model()
+                with stage("Gemma scene description", STAGE_TIMEOUT_SECONDS):
+                    description = generate_scene_description(original, model, processor)
+                with stage("Gemma rescue instruction", STAGE_TIMEOUT_SECONDS):
+                    instruction = generate_rescue_instruction(description, model, processor)
+                record = {
+                    "image_key": image_key,
+                    "stem": stem,
+                    "labels": labels,
+                    "url": info.get("url"),
+                    "scene_description": description,
+                    "editing_instruction": instruction,
+                    "flux_prompt": build_flux_prompt(description, instruction),
+                    "image_size": IMAGE_SIZE,
+                    "seed": BASE_SEED + len(records),
+                    "prepared_image_path": str(reference_path),
+                    "output_path": str(Path(OUTPUT_DIR) / f"{stem}.png"),
+                    "reference_path": str(Path(REAL_IMAGES_DIR) / f"{stem}.png"),
+                    "generated_reference_path": str(Path(GEN_IMAGES_DIR) / f"{stem}.png"),
+                }
+                save_image(original, reference_path)
+                write_json(prepared_path, record)
+                records.append(record)
+                errors = 0
+                print(f"Prepared: {len(records)}/{LIMIT_IMAGES}", flush=True)
+            except torch.cuda.OutOfMemoryError:
+                print("Preparation OOM; stopping this phase. Completed prompts are saved.", flush=True)
+                break
             except Exception as exc:
+                errors += 1
+                print(f"Preparation failed for {image_key}: {type(exc).__name__}: {exc}", flush=True)
+            finally:
+                original = None
+    finally:
+        # Release owners before clearing the allocator at the phase boundary.
+        model = processor = None
+        unload_watermark_tools()
+        cleanup_cuda()
+    return records
 
-                print(
-                    f"Watermark removal skipped: {exc}"
-                )
 
-        original_image = resize_center_crop(original_image, IMAGE_SIZE)
-
-        if torch.cuda.is_available():
-            print(
-                "GPU Memory:",
-                round(torch.cuda.memory_allocated() / 1024**3, 2),
-                "GB",
-            )
-
-        if vision_model is None or vision_processor is None:
-            try:
-                vision_model, vision_processor = load_gemma_model()
-            except torch.cuda.OutOfMemoryError:
-                print("Gemma CUDA Out Of Memory.")
-                cleanup_cuda()
-                consecutive_errors += 1
-                skipped += 1
-                del original_image
+def render_samples(records: list[dict], started: float) -> int:
+    count = errors = attempts = 0
+    pipe = None
+    try:
+        for record in records:
+            if count >= LIMIT_IMAGES or budget_exhausted(started) or error_limit_reached(errors):
+                break
+            if completed_sample(record["stem"]) is not None:
+                count += 1
                 continue
-
-        try:
-            with stage("Gemma scene description", STAGE_TIMEOUT_SECONDS):
-                scene_description = generate_scene_description(
-                    image=original_image,
-                    vision_model=vision_model,
-                    vision_processor=vision_processor,
-                )
-        except Exception as exc:
-
-            print(
-                f"Generate Image Error: {exc}"
-            )
-
-            consecutive_errors += 1
-            skipped += 1
-
-            del original_image
-
-            with stage(
-                "Cleanup",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-                cleanup()
-
-            continue
-
-
-        print("\nScene Description")
-        print("-" * 60)
-        print(scene_description)
-
-
-        # ====================================================
-        # Gemma rescue instruction
-        # ====================================================
-
-        try:
-
-            with stage(
-                "Gemma rescue instruction",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-
-                rescue_instruction = (
-                    generate_rescue_instruction(
-                        scene_description=scene_description,
-                        vision_model=vision_model,
-                        vision_processor=vision_processor,
-                    )
-                )
-
-        except Exception as exc:
-
-            print(
-                f"LLM Error: {exc}"
-            )
-
-            consecutive_errors += 1
-            skipped += 1
-
-            del original_image
-
-            with stage(
-                "Cleanup",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-                cleanup()
-
-            continue
-
-
-        print("\nEditing Instruction")
-        print("-" * 60)
-        print(rescue_instruction)
-
-
-        # ====================================================
-        # Build FLUX prompt
-        # ====================================================
-
-        flux_prompt = build_flux_prompt(
-            scene_description,
-            rescue_instruction,
-        )
-
-        print("\nFLUX Prompt")
-        print("-" * 60)
-        print(flux_prompt)
-
-
-        # ====================================================
-        # Load FLUX lazily
-        #
-        # Gemma and FLUX remain loaded for the generation loop.
-        # ====================================================
-
-        if pipe is None:
-
+            if MAX_ATTEMPTS > 0 and attempts >= MAX_ATTEMPTS:
+                break
+            attempts += 1
             try:
-
-                with stage(
-                    "Load FLUX",
-                    MODEL_LOAD_TIMEOUT_SECONDS,
-                ):
-
+                if pipe is None:
                     pipe = load_flux_memory_safe()
-
+                with Image.open(record["prepared_image_path"]) as reference:
+                    original = reference.convert("RGB")
+                generated = generate_flux_safe(
+                    pipe, original, record["flux_prompt"], record["seed"] - BASE_SEED,
+                )
+                save_image(original, Path(record["reference_path"]))
+                save_image(generated, Path(record["generated_reference_path"]))
+                save_image(generated, Path(record["output_path"]))
+                # Metadata is the commit marker: incomplete samples are retried on resume.
+                write_json(Path(OUTPUT_DIR) / "_metadata" / f'{record["stem"]}.json', record)
+                count += 1
+                errors = 0
+                print(f"Generated: {count}/{LIMIT_IMAGES}", flush=True)
             except torch.cuda.OutOfMemoryError:
-
                 print(
-                    "FLUX CUDA Out Of Memory "
-                    "during initialization."
+                    "Persistent CUDA OOM; stopping instead of repeating failing samples. "
+                    "Free GPU memory or lower IMAGE_SIZE and rerun. Saved work is resumable.",
+                    flush=True,
                 )
-
-                cleanup_cuda()
-
-                print(
-                    "FLUX could not be initialized "
-                    "with available GPU memory."
-                )
-
-                consecutive_errors += 1
-                skipped += 1
-
-                del original_image
-
-                continue
-
-
-        # ====================================================
-        # FLUX generation
-        # ====================================================
-
-        try:
-
-            generated_image = generate_flux_safe(
-                pipe=pipe,
-                original_image=original_image,
-                flux_prompt=flux_prompt,
-                count=count,
-            )
-
-        except torch.cuda.OutOfMemoryError:
-
-            print(
-                "FLUX CUDA Out Of Memory."
-            )
-
-            consecutive_errors += 1
-            skipped += 1
-
-            del original_image
-
-            with stage(
-                "Cleanup",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-                cleanup()
-
-            continue
-
-
-        # ====================================================
-        # Quality evaluation
-        #
-        # Evaluators are CPU-only.
-        #
-        # FLUX remains offloaded, so quality evaluation does not
-        # compete for the GPU.
-        # ====================================================
-
-        try:
-
-            with stage(
-                "Quality evaluation",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-
-                (
-                    sc_score,
-                    pq_score,
-                ) = evaluate_quality(
-                    evaluators,
-                    generated_image,
-                    flux_prompt,
-                )
-
-                o_score = compute_o_score(
-                    sc_score,
-                    pq_score,
-                )
-
-                ssim_val = compute_ssim(
-                    original_image,
-                    generated_image,
-                )
-
-        except Exception as exc:
-
-            print(
-                "Quality evaluation failed: "
-                f"{type(exc).__name__}: {exc}"
-            )
-
-            consecutive_errors += 1
-            skipped += 1
-
-            del original_image
-            del generated_image
-
-            with stage(
-                "Cleanup",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-                cleanup()
-
-            continue
-
-
-        print(
-            f"O_Score: {o_score:.4f} | "
-            f"SSIM: {ssim_val:.4f}"
-        )
-
-
-        # ====================================================
-        # Quality gate
-        # ====================================================
-
-        if not passes_quality_gate(
-            o_score,
-            ssim_val,
-        ):
-
-            consecutive_errors = 0
-
-            print(
-                "Rejected by quality gate"
-            )
-
-            skipped += 1
-
-            del original_image
-            del generated_image
-
-            with stage(
-                "Cleanup",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-                cleanup()
-
-            continue
-
-
-        # ====================================================
-        # Save generated image
-        # ====================================================
-
-        output_path = save_generated_image(
-            image=generated_image,
-            output_dir=OUTPUT_DIR,
-            image_name=f"{safe_name}.png",
-        )
-
-        save_reference_images(
-            safe_name,
-            original_image,
-            generated_image,
-        )
-
-        print(
-            f"Saved -> {output_path}"
-        )
-
-
-        # ====================================================
-        # Metadata
-        # ====================================================
-
-        metadata = {
-            "image_key": img_key,
-            "labels": positive_incidents,
-            "url": url,
-            "scene_description": scene_description,
-            "editing_instruction": rescue_instruction,
-            "flux_prompt": flux_prompt,
-            "sc_score": round(
-                sc_score,
-                4,
-            ),
-            "pq_score": round(
-                pq_score,
-                4,
-            ),
-            "o_score": round(
-                o_score,
-                4,
-            ),
-            "ssim": round(
-                ssim_val,
-                4,
-            ),
-            "output_path": output_path,
-        }
-
-
-        evaluation_records.append(
-            metadata
-        )
-
-
-        metadata_path = os.path.join(
-            metadata_dir,
-            f"{safe_name}.json",
-        )
-
-
-        with open(
-            metadata_path,
-            "w",
-            encoding="utf-8",
-        ) as file:
-
-            json.dump(
-                metadata,
-                file,
-                indent=2,
-                ensure_ascii=False,
-            )
-
-
-        # ====================================================
-        # Progress
-        # ====================================================
-
-        consecutive_errors = 0
-        count += 1
-
-        print(
-            f"Progress: "
-            f"{count}/{LIMIT_IMAGES}"
-        )
-
-
-        # ====================================================
-        # Per-sample cleanup
-        # ====================================================
-
-        del original_image
-        del generated_image
-        del scene_description
-        del rescue_instruction
-        del flux_prompt
-
-        with stage(
-            "Cleanup",
-            STAGE_TIMEOUT_SECONDS,
-        ):
-            cleanup()
-
-
-    except Exception:
-
-        print(
-            "\nUnexpected Error"
-        )
-
-        consecutive_errors += 1
-
-        traceback.print_exc()
-
-
-        try:
-
-            with stage(
-                "Cleanup",
-                STAGE_TIMEOUT_SECONDS,
-            ):
-                cleanup()
-
-        except Exception:
-            cleanup_cuda()
-
-
-        skipped += 1
-
-        continue
-
-
-# ============================================================
-# Generation summary
-# ============================================================
-
-print("\n" + "=" * 80)
-print("Generation loop finished")
-print(f"Attempted : {attempts}")
-print(f"Generated : {count}")
-print(f"Skipped   : {skipped}")
-print(f"Output    : {OUTPUT_DIR}")
-
-
-# ============================================================
-# Evaluation report
-# ============================================================
-
-csv_path = export_evaluation_report(
-    evaluation_records
-)
-
-if csv_path:
-
-    print(
-        f"CSV Report: {csv_path}"
-    )
-
-
-# ============================================================
-# Dataset not completed
-# ============================================================
-
-# Persist per-image metadata before dataset evaluation can fail or time out.
-write_metadata_jsonl(evaluation_records, OUTPUT_DIR)
-
-if count < LIMIT_IMAGES:
-
-    stop_reason = (
-        stop_reason
-        or "Dataset exhausted before "
-        "reaching target"
-    )
-
-    print(
-        f"Generation stopped: {stop_reason}. "
-        f"Generated {count}/{LIMIT_IMAGES} images. "
-        "Continuing CMMD/SDQM evaluation on available saved images.",
-        flush=True,
-    )
-
-with stage("Release generation models", STAGE_TIMEOUT_SECONDS):
-    unload_watermark_tools()
-    del vision_model, vision_processor, pipe, evaluators
-    cleanup()
-
-
-# ============================================================
-# CMMD report
-# ============================================================
-
-with stage(
-    "CMMD report",
-    EVALUATION_TIMEOUT_SECONDS,
-):
-
-    run_cmmd_report()
-
-
-# ============================================================
-# SDQM report
-# ============================================================
-
-with stage(
-    "SDQM report",
-    EVALUATION_TIMEOUT_SECONDS,
-):
-
-    sdqm_metrics = run_sdqm_report()
-
-
-if sdqm_metrics:
-
-    evaluation_records = (
-        attach_sdqm_metadata(
-            evaluation_records,
-            sdqm_metrics,
-        )
-    )
-
-
-# ============================================================
-# Final metadata
-# ============================================================
-
-metadata_jsonl_path = (
-    write_metadata_jsonl(
-        evaluation_records,
-        OUTPUT_DIR,
-    )
-)
-
-
-if metadata_jsonl_path:
-
-    print(
-        f"Metadata JSONL: "
-        f"{metadata_jsonl_path}"
-    )
-
-if count < LIMIT_IMAGES:
-    print(
-        f"Dataset evaluation finished; generation target was not reached "
-        f"({count}/{LIMIT_IMAGES}): {stop_reason}. Exiting with code 2.",
-        flush=True,
-    )
-    raise SystemExit(2)
+                break
+            except Exception as exc:
+                errors += 1
+                print(f'Generation failed for {record["image_key"]}: {type(exc).__name__}: {exc}', flush=True)
+            finally:
+                original = generated = None
+    finally:
+        pipe = None
+        cleanup_cuda()
+    return count
+
+
+def main() -> int:
+    for directory in (
+        Path(OUTPUT_DIR), Path(REAL_IMAGES_DIR), Path(GEN_IMAGES_DIR),
+        Path(OUTPUT_DIR) / "_prepared", Path(OUTPUT_DIR) / "_metadata",
+    ):
+        directory.mkdir(parents=True, exist_ok=True)
+    random_seed()
+    started = monotonic()
+    with stage("Dataset initialization", STAGE_TIMEOUT_SECONDS):
+        data = loading_dataset(IMAGE_SUMMARY_PATH)
+    records = prepare_samples(data, started)
+    count = render_samples(records, started)
+    print(f"Generation complete: {count}/{LIMIT_IMAGES}. Output: {OUTPUT_DIR}", flush=True)
+    print("Run python main_evaluation.py to evaluate saved images.", flush=True)
+    return 0 if count >= LIMIT_IMAGES else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

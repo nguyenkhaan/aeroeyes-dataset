@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover - compatibility fallback
 def loading_model(
     model_id: str = GENERAL_MODEL,
     token: str | None = HF_TOKEN,
-    device_map: str = "auto",
+    device_map: str | None = None,
     torch_dtype: torch.dtype | None = None,
 ):
     ensure_model_storage()
@@ -25,8 +25,8 @@ def loading_model(
 
     vision_model = AutoModelForImageTextToText.from_pretrained(
         model_id,
-        dtype="auto",
-        device_map=device_map,
+        dtype=resolved_dtype,
+        device_map=device_map or ("cuda" if torch.cuda.is_available() else "cpu"),
         token=resolved_token,
         cache_dir=str(HF_HUB_CACHE),
     ).eval()

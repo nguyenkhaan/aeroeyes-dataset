@@ -7,7 +7,7 @@ Ported from "Pipeline + Long Clip + Remove Watermark.ipynb" (Cell 4b).
 
 The OCR reader and the inpainting model are loaded lazily on first use and
 cached for the rest of the process. Call ``unload_watermark_tools()`` before
-the dataset-level CMMD/SDQM stage to release the VRAM they hold.
+loading FLUX to release the VRAM they hold.
 """
 from __future__ import annotations
 

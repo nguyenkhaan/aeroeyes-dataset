@@ -48,17 +48,26 @@ VENV_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
 ```
 
 ### Run code  
-Run the pipeline in two separate jobs. In the final Python command under
-`Run project` in `sbatch.slurm`, change `main.py` to `main_down.py` and submit
-the download job. After it finishes, change it back to `main.py` and submit
-the generation job using the same command below.
+Run the download once, then generation and evaluation as separate processes:
+
+```bash
+python main_down.py
+python main.py
+python main_evaluation.py
+```
+
+The local `sbatch.slurm` runs generation followed by evaluation. This file is
+Git-ignored; copy its changes to the server separately. It also evaluates saved
+partial results when generation exits with code 2, preserving that exit status.
+For downloading under Slurm, replace its generation/evaluation commands with
+`python main_down.py` using the configured Python interpreter.
 
 `main_down.py` reads `JSON_PATH` (default: `data/input/eccv_train.json`);
 set `JSON_PATH` if your dataset JSON is in the output directory. It downloads
 all records with at least one positive disaster label (`incidents` value `1`) to
-`data/input/download_images/` as lossless RGB PNG files. The original dataset
+`/datastore/cndt_khanhnd/models/aeroeyes_output/download_images/` as lossless RGB PNG files. The original dataset
 keys and metadata (including labels and source URLs) are stored together with
-`downloaded_file` in `data/input/image_summary.json`. Failed downloads or
+`downloaded_file` in `/datastore/cndt_khanhnd/models/aeroeyes_output/image_summary.json`. Failed downloads or
 invalid images are logged and skipped without stopping the remaining downloads.
 Records with missing or empty `incidents`, or no value equal to `1`, are skipped
 before downloading and are not included in the summary. Every download run scans
@@ -68,7 +77,7 @@ a Python exception; a forced process kill cannot save the current summary.
 Rerunning this step downloads the dataset again and rebuilds the summary.
 
 If the download job was interrupted, run `python main_label.py` to rebuild
-`data/input/image_summary.json` from the images already on disk without
+`/datastore/cndt_khanhnd/models/aeroeyes_output/image_summary.json` from the images already on disk without
 downloading them again. Alternatively, replace `main.py` with `main_label.py`
 in the final Python command in `sbatch.slurm`. Use the same `JSON_PATH` dataset
 as the download job: the script matches each original key to its SHA-256 PNG
@@ -77,11 +86,24 @@ their metadata and source URLs. It scans the full JSON regardless of
 `LIMIT_IMAGES` and atomically replaces any existing summary after the scan.
 Temporary `.tmp` images are ignored. After recovery, run `main.py` as usual.
 
-`main.py` reads only this summary and the local images, then applies the existing
-positive-label filter, watermark removal, generation, and evaluation steps.
-Missing or unreadable local images are skipped. Downloading does not use the
-generation count/error limits. The existing Slurm GPU checks and preflight
-still run for both jobs.
+`main.py` reads only the summary and local images. It first prepares cleaned
+images and Gemma prompts in `output/_prepared`, then releases Gemma and watermark
+tools once and loads FLUX. FLUX stays resident in VRAM throughout rendering;
+there is no CPU offload or per-image model swapping. Both phases checkpoint to
+disk, so interrupted work can resume without repeating completed samples.
+Generation artifacts, reference pairs, and metadata live under
+`/datastore/cndt_khanhnd/models/aeroeyes_output/output`.
+These storage paths are fixed in `src/core/config.py`; old `OUTPUT_DIR`,
+`REAL_IMAGES_DIR`, and `GEN_IMAGES_DIR` environment values do not redirect them.
+SDQM report, history, and summary paths also stay under this output directory.
+Existing files in the old download location are not moved automatically; copy
+them and their summary to the new paths before generating, or rerun downloading.
+
+`main_evaluation.py` reads committed `output/_metadata/*.json` files, computes
+SC/PQ/O-score/SSIM, records `quality_passed`, and produces CSV, JSONL, CMMD, and
+SDQM reports. It evaluates all saved images, including resumed runs. Generation
+retains all images; quality rejection is now a report field, not a regeneration
+loop. The target counts generated images, not quality-approved images.
 
 ```bash 
 mkdir -p logs
@@ -93,10 +115,10 @@ sbatch sbatch.slurm
 The default Slurm allocation is **72 hours**, controlled by `#SBATCH --time`,
 with 20 GB of system memory.
 The batch script runs GPU selection, the CUDA allocation/synchronization probe,
-preflight, and the pipeline with a 72-hour shell timeout. Slow CUDA initialization
-can finish without being killed after 120 seconds. Each step logs
+preflight, generation (68-hour shell timeout), and evaluation (4-hour shell
+timeout). Each step logs
 `START`, `END`, or `FAILED`; command failures stop the job. Python logs are
-unbuffered. A stuck CUDA probe can wait until Slurm ends the allocation.
+unbuffered. The CUDA probe has a 60-second timeout.
 
 The former `JOB_TIMEOUT_SECONDS`, `STARTUP_TIMEOUT_SECONDS`, and
 `PREFLIGHT_TIMEOUT_SECONDS` variables are no longer used by the batch script.
@@ -104,16 +126,16 @@ The Python pipeline retains its own limits:
 
 | Environment variable | Default | Meaning |
 |---|---:|---|
-| `LIMIT_IMAGES` | 500 | Newly accepted images per run |
-| `MAX_ATTEMPTS` | `4 × LIMIT_IMAGES` | Local images attempted, including quality rejections |
+| `LIMIT_IMAGES` | 500 | Target saved images, including resumed samples |
+| `MAX_ATTEMPTS` | `4 × LIMIT_IMAGES` | Attempts per preparation/rendering phase |
 | `MAX_CONSECUTIVE_ERRORS` | 10 | Consecutive processing errors before stopping |
 | `GENERATION_TIMEOUT_SECONDS` | 244800 (68 hours) | Stop starting new images after this time |
 | `MODEL_LOAD_TIMEOUT_SECONDS` | 1800 | Each model-loading stage |
-| `STAGE_TIMEOUT_SECONDS` | 900 | Each Gemma, FLUX, quality, or cleanup stage |
+| `STAGE_TIMEOUT_SECONDS` | 900 | Each Gemma, FLUX, watermark, or quality stage |
 | `EVALUATION_TIMEOUT_SECONDS` | 3600 | Each CMMD/SDQM report stage |
 
 All Python limits must be non-negative integer seconds/counts and can be placed
-in `.env`; zero disables the corresponding guard. Change Slurm's `--time` and
+in `.env`; zero disables count/error/overall generation guards. Stage timeouts must be positive. Change Slurm's `--time` and
 the shell timeout together to adjust the overall job allocation.
 
 Downloads use request timeouts and retries without a process-exiting watchdog.
@@ -125,17 +147,27 @@ not be saved. Previously completed image/metadata files remain on disk.
 These process limits cannot repair a GPU driver or kernel stuck in
 uninterruptible I/O; that requires the cluster administrator.
 
-Existing output images and ineligible records do not consume attempts.
-A quality rejection or successfully saved image resets the error streak.
-If the target is not reached because of limits or dataset exhaustion,
-the pipeline writes per-image reports, runs CMMD/SDQM on available saved images,
-then exits with code 2 to indicate the incomplete generation target. SDQM needs
-at least two real and two synthetic images; with fewer images it writes a
-`skipped` status and reason to `data/output/sdqm/sdqm_report.json`.
-Gemma and FLUX are each loaded once and reused throughout generation. After
-the generation loop ends, both models are released before bounded dataset
-evaluation. The shell hard timeout is 72 hours; timeout exits are normally
-124, or 137 after KILL.
+Completed samples and ineligible records do not consume attempts. A successful
+sample resets the error streak. Generation exits with code 2 if its target is
+not reached. Evaluation can run independently on partial output; SDQM requires
+at least two pairs. Evaluation exits with code 1 on metric failures and code 2
+when no images can be evaluated.
+
+FLUX uses bfloat16 on CUDA and tiled VAE encoding/decoding. Gemma uses the
+requested dtype on one device, without automatic CPU/GPU dispatch. Cached
+allocator memory is cleared at phase boundaries and once after an OOM traceback
+has been released, not after every successful image. A second FLUX OOM stops
+the run immediately, retaining checkpoints. This avoids retrying ten images
+under the same memory pressure. It cannot make model weights fit on an
+undersized or busy GPU: use an allocation with sufficient free VRAM, or lower
+`IMAGE_SIZE` (default 1024; at least 256, a multiple of 32) for activation-memory
+pressure. Resolution is explicitly passed to FLUX and never silently reduced.
+Slurm now respects scheduler GPU visibility and MPS settings instead of forcing
+physical GPU 2. Validate peak memory and image quality on your server.
+
+The lifecycle follows [PyTorch's allocator guidance](https://docs.pytorch.org/docs/stable/notes/cuda.html#memory-management):
+emptying the cache cannot free live model tensors. FLUX's VAE tiling uses the
+[Diffusers Flux2 implementation](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/autoencoders/autoencoder_kl_flux2.py).
 
 For a small diagnostic run:
 
@@ -185,9 +217,7 @@ export AEROEYES_MODEL_DIR="/datastore/cndt_khanhnd/models/aeroeyes_model"
 
 ```bash
 "$PYTHON" scripts/preflight_evaluation.py --require-cuda --require-images
-"$PYTHON" scripts/run_evaluation.py \
-  --real-dir data/real_reference \
-  --synthetic-dir data/gen_reference
+"$PYTHON" main_evaluation.py
 ```
 
 ## Generate images and reports with Slurm
@@ -199,9 +229,9 @@ sbatch --export=ALL,PYTHON="$PYTHON",AEROEYES_MODEL_DIR="$AEROEYES_MODEL_DIR" sb
 Outputs:
 
 ```text
-data/output/evaluation_report.csv
-data/output/evaluation_metadata.jsonl
-data/output/sdqm/sdqm_report.json
-data/output/sdqm/sdqm_values.csv
-reports/sdqm_summary.md
+/datastore/cndt_khanhnd/models/aeroeyes_output/output/evaluation_report.csv
+/datastore/cndt_khanhnd/models/aeroeyes_output/output/evaluation_metadata.jsonl
+/datastore/cndt_khanhnd/models/aeroeyes_output/output/sdqm/sdqm_report.json
+/datastore/cndt_khanhnd/models/aeroeyes_output/output/sdqm/sdqm_values.csv
+/datastore/cndt_khanhnd/models/aeroeyes_output/output/sdqm/sdqm_summary.md
 ```

@@ -71,8 +71,9 @@ if torch.version.cuda != expected_cuda:
 print(f"PyTorch {torch.__version__} compiled for CUDA {torch.version.cuda}.")
 PY
 
-mkdir -p "$ROOT_DIR/logs" "$ROOT_DIR/data/input" "$ROOT_DIR/data/output" \
-  "$ROOT_DIR/data/real_reference" "$ROOT_DIR/data/gen_reference" \
+mkdir -p "$ROOT_DIR/logs" "$ROOT_DIR/data/input" \
+  /datastore/cndt_khanhnd/models/aeroeyes_output/download_images \
+  /datastore/cndt_khanhnd/models/aeroeyes_output/output \
   "$MODEL_STORAGE_DIR/huggingface/hub" \
   "$MODEL_STORAGE_DIR/huggingface/assets" \
   "$MODEL_STORAGE_DIR/huggingface/xet" \

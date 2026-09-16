@@ -101,6 +101,8 @@ def generate_rescue_image(
 
         result = pipe(
             image=image,
+            width=image.width,
+            height=image.height,
             prompt=prompt,
             guidance_scale=guidance_scale,
             num_inference_steps=num_inference_steps,
@@ -110,6 +112,4 @@ def generate_rescue_image(
     generated_image = result.images[0]
     del result
     del generator
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
     return generated_image

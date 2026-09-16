@@ -38,6 +38,7 @@ def loading_model(
         cache_dir=str(HF_HUB_CACHE),
     )
 
+    pipe.vae.enable_tiling()
     pipe.to(resolved_device)
 
     print(

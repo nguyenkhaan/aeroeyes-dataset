@@ -70,20 +70,12 @@ JSON_PATH = os.getenv(
     "JSON_PATH",
     str(PROJECT_ROOT / "data" / "input" / "eccv_train.json"),
 )
-OUTPUT_DIR = os.getenv(
-    "OUTPUT_DIR",
-    str(PROJECT_ROOT / "data" / "output"),
-)
-DOWNLOAD_IMAGES_DIR = PROJECT_ROOT / "data" / "input" / "download_images"
-IMAGE_SUMMARY_PATH = PROJECT_ROOT / "data" / "input" / "image_summary.json"
-REAL_IMAGES_DIR = os.getenv(
-    "REAL_IMAGES_DIR",
-    str(PROJECT_ROOT / "data" / "real_reference"),
-)
-GEN_IMAGES_DIR = os.getenv(
-    "GEN_IMAGES_DIR",
-    str(PROJECT_ROOT / "data" / "gen_reference"),
-)
+OUTPUT_STORAGE_DIR = Path("/datastore/cndt_khanhnd/models/aeroeyes_output")
+OUTPUT_DIR = str(OUTPUT_STORAGE_DIR / "output")
+DOWNLOAD_IMAGES_DIR = OUTPUT_STORAGE_DIR / "download_images"
+IMAGE_SUMMARY_PATH = OUTPUT_STORAGE_DIR / "image_summary.json"
+REAL_IMAGES_DIR = str(Path(OUTPUT_DIR) / "real_reference")
+GEN_IMAGES_DIR = str(Path(OUTPUT_DIR) / "gen_reference")
 CMMD_REPO_DIR = os.getenv(
     "CMMD_REPO_DIR",
     str(PROJECT_ROOT / "cmmd-pytorch"),
@@ -95,7 +87,9 @@ FLUX_MODEL = FLUX_REPO
 # ----------------------------------------------------------
 # Generation Parameters
 # ----------------------------------------------------------
-IMAGE_SIZE = 1024
+IMAGE_SIZE = int(os.getenv("IMAGE_SIZE", "1024"))
+if IMAGE_SIZE < 256 or IMAGE_SIZE % 32:
+    raise ValueError("IMAGE_SIZE must be at least 256 and a multiple of 32")
 LIMIT_IMAGES = int(os.getenv("LIMIT_IMAGES", "500"))
 MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", str(LIMIT_IMAGES * 4)))
 MAX_CONSECUTIVE_ERRORS = int(os.getenv("MAX_CONSECUTIVE_ERRORS", "10"))
@@ -173,10 +167,7 @@ SDQM_REPO_DIR = os.getenv(
     "SDQM_REPO_DIR",
     str(PROJECT_ROOT / "third_party" / "SDQM"),
 )
-SDQM_OUTPUT_DIR = os.getenv(
-    "SDQM_OUTPUT_DIR",
-    str(Path(OUTPUT_DIR) / "sdqm"),
-)
+SDQM_OUTPUT_DIR = str(Path(OUTPUT_DIR) / "sdqm")
 SDQM_ENABLED = os.getenv("SDQM_ENABLED", "true").lower() in ("1", "true", "yes")
 SDQM_EMBEDDING_MODEL = os.getenv(
     "SDQM_EMBEDDING_MODEL",
@@ -213,10 +204,7 @@ SDQM_VINFO_ENABLED = os.getenv("SDQM_VINFO_ENABLED", "false").lower() in (
     "yes",
 )
 SDQM_VINFO_DATASET = os.getenv("SDQM_VINFO_DATASET", "rescue")
-SDQM_HISTORY_CSV = os.getenv(
-    "SDQM_HISTORY_CSV",
-    str(Path(SDQM_OUTPUT_DIR) / "sdqm_history.csv"),
-)
+SDQM_HISTORY_CSV = str(Path(SDQM_OUTPUT_DIR) / "sdqm_history.csv")
 SDQM_MAP_CSV = os.getenv("SDQM_MAP_CSV", "")
 SDQM_MAP_COLUMN = os.getenv("SDQM_MAP_COLUMN", "map")
 SDQM_MAP_VALUE = os.getenv("SDQM_MAP_VALUE")
@@ -232,10 +220,7 @@ SDQM_RUN_REGRESSION = os.getenv("SDQM_RUN_REGRESSION", "true").lower() in (
 )
 SDQM_MIN_REGRESSION_ROWS = int(os.getenv("SDQM_MIN_REGRESSION_ROWS", "3"))
 SDQM_MIN_IMAGES = 2
-SDQM_SUMMARY_PATH = os.getenv(
-    "SDQM_SUMMARY_PATH",
-    str(PROJECT_ROOT / "reports" / "sdqm_summary.md"),
-)
+SDQM_SUMMARY_PATH = str(Path(SDQM_OUTPUT_DIR) / "sdqm_summary.md")
 # ----------------------------------------------------------
 # HTTP Headers
 # ----------------------------------------------------------
