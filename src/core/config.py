@@ -70,7 +70,9 @@ JSON_PATH = os.getenv(
     "JSON_PATH",
     str(PROJECT_ROOT / "data" / "input" / "eccv_train.json"),
 )
-OUTPUT_STORAGE_DIR = Path("/datastore/cndt_khanhnd/models/aeroeyes_output")
+OUTPUT_STORAGE_DIR = Path(
+    os.getenv("AEROEYES_OUTPUT_DIR", "/datastore/cndt_khanhnd/models/aeroeyes_output")
+)
 OUTPUT_DIR = str(OUTPUT_STORAGE_DIR / "output")
 DOWNLOAD_IMAGES_DIR = OUTPUT_STORAGE_DIR / "download_images"
 IMAGE_SUMMARY_PATH = OUTPUT_STORAGE_DIR / "image_summary.json"
@@ -107,9 +109,9 @@ for limit_name in (
 REQUEST_TIMEOUT = 30
 DOWNLOAD_RETRIES = 3
 MAX_NEW_TOKENS = 256
-NUM_INFERENCE_STEPS = 20 # 15
-GUIDANCE_SCALE = 3.5 # 3.5 
-BASE_SEED = 50
+NUM_INFERENCE_STEPS = int(os.getenv("NUM_INFERENCE_STEPS", "20"))
+GUIDANCE_SCALE = float(os.getenv("GUIDANCE_SCALE", "3.5"))
+BASE_SEED = int(os.getenv("BASE_SEED", "50"))
 EXPECTED_PYTORCH_CUDA = os.getenv("EXPECTED_PYTORCH_CUDA", "12.8")
 # ----------------------------------------------------------
 # Quality Evaluation (humaninstruction-ver2-8)
