@@ -4,20 +4,30 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
 
-from PIL import Image
-from tqdm import tqdm
+# Add project root to sys.path so 'src' can be imported when running script directly
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = lambda x, **kwargs: x
 
 from src.core.config import (
     DOWNLOAD_IMAGES_DIR,
     IMAGE_SUMMARY_PATH,
     JSON_PATH,
 )
-from src.vision.disaster_filter import (
-    DisasterVisualFilter,
-    is_valid_disaster_metadata,
-)
+from src.vision.disaster_filter import is_valid_disaster_metadata
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -102,6 +112,8 @@ def main() -> None:
     final_accepted: dict[str, dict] = accepted_metadata
     if args.use_clip and not args.metadata_only:
         print("\n--- STAGE 2: CLIP ZERO-SHOT VISUAL FILTERING ---")
+        from src.vision.disaster_filter import DisasterVisualFilter
+
         visual_filter = DisasterVisualFilter(threshold=args.clip_threshold)
         visual_filter.load()
 

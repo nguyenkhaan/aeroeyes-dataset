@@ -1,11 +1,22 @@
-from dotenv import load_dotenv
-from pathlib import Path
 import os
-import torch
-import numpy as np
 import random
+from pathlib import Path
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
+    import torch
+except ImportError:
+    torch = None
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_STORAGE_DIR = Path(
@@ -278,8 +289,9 @@ HEADERS = {
 
 def random_seed(): 
     random.seed(BASE_SEED)
-    np.random.seed(BASE_SEED)
-    torch.manual_seed(BASE_SEED)
-
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(BASE_SEED)
+    if np is not None:
+        np.random.seed(BASE_SEED)
+    if torch is not None:
+        torch.manual_seed(BASE_SEED)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(BASE_SEED)

@@ -3,9 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-import torch
-from PIL import Image
-from transformers import CLIPModel, CLIPProcessor
+try:
+    import torch
+    from transformers import CLIPModel, CLIPProcessor
+except ImportError:
+    torch = None
+    CLIPModel = None
+    CLIPProcessor = None
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 from src.core.config import (
     CLIP_MODEL_ID,
