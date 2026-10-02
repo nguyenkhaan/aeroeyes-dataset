@@ -40,6 +40,18 @@ class DisasterFilterTests(unittest.TestCase):
         is_valid, reason = is_valid_disaster_metadata(incidents, damage)
         self.assertTrue(is_valid)
 
+    def test_accepts_flooded_and_on_fire_labels(self) -> None:
+        # Exact labels from Incidents-1M dataset
+        self.assertTrue(is_valid_disaster_metadata({"flooded": 1})[0])
+        self.assertTrue(is_valid_disaster_metadata({"on fire": 1})[0])
+        self.assertTrue(is_valid_disaster_metadata({"on_fire": 1})[0])
+        self.assertTrue(is_valid_disaster_metadata({"building collapse": 1})[0])
+
+    def test_rejects_traffic_jam_with_spaces_or_underscores(self) -> None:
+        self.assertFalse(is_valid_disaster_metadata({"traffic jam": 1})[0])
+        self.assertFalse(is_valid_disaster_metadata({"traffic_jam": 1})[0])
+        self.assertFalse(is_valid_disaster_metadata({"car accident": 1})[0])
+
 
 if __name__ == "__main__":
     unittest.main()

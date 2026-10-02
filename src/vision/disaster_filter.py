@@ -26,6 +26,10 @@ from src.core.config import (
 )
 
 
+def _normalize_incident_name(name: str) -> str:
+    return name.lower().replace("_", " ").strip()
+
+
 def is_valid_disaster_metadata(
     incidents: dict[str, Any] | None,
     damage: dict[str, Any] | None = None,
@@ -42,7 +46,7 @@ def is_valid_disaster_metadata(
         return False, "Missing or empty incidents metadata"
 
     active_incidents = {
-        cls.lower().strip()
+        _normalize_incident_name(cls)
         for cls, val in incidents.items()
         if val == 1 or val is True or str(val).lower() == "true"
     }
@@ -50,12 +54,11 @@ def is_valid_disaster_metadata(
     if not active_incidents:
         return False, "No positive incident labels"
 
-    discard_matches = active_incidents.intersection(
-        {c.lower().strip() for c in discard_classes}
-    )
-    valid_matches = active_incidents.intersection(
-        {c.lower().strip() for c in valid_classes}
-    )
+    norm_discard = {_normalize_incident_name(c) for c in discard_classes}
+    norm_valid = {_normalize_incident_name(c) for c in valid_classes}
+
+    discard_matches = active_incidents.intersection(norm_discard)
+    valid_matches = active_incidents.intersection(norm_valid)
 
     if discard_matches and not valid_matches:
         return False, f"Non-disaster incident only: {', '.join(sorted(discard_matches))}"
