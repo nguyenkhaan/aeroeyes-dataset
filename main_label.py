@@ -5,6 +5,7 @@ from PIL import Image
 
 from src.core.config import DOWNLOAD_IMAGES_DIR, IMAGE_SUMMARY_PATH
 from src.helper.loading_dataset import loading_dataset
+from src.vision.disaster_filter import is_valid_disaster_metadata
 
 
 def main() -> None:
@@ -24,9 +25,9 @@ def main() -> None:
             continue
 
         incidents = image_info.get("incidents") or {}
-        if not isinstance(incidents, dict) or not any(
-            value == 1 for value in incidents.values()
-        ):
+        damage = image_info.get("damage")
+        is_valid, reason = is_valid_disaster_metadata(incidents, damage)
+        if not is_valid:
             skipped += 1
             continue
 
@@ -56,7 +57,7 @@ def main() -> None:
     temporary_summary_path.replace(IMAGE_SUMMARY_PATH)
     print(
         f"Recovered: {len(summary)} | Missing: {missing} | "
-        f"Invalid: {invalid} | No positive labels: {skipped}",
+        f"Invalid: {invalid} | Filtered non-disaster: {skipped}",
         flush=True,
     )
     print(f"Image summary: {IMAGE_SUMMARY_PATH}", flush=True)

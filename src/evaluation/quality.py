@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from src.core.config import (
     CLIP_MODEL_ID,
+    DELTA_MAX_AREA_RATIO,
+    DELTA_MIN_AREA_RATIO,
     HF_HUB_CACHE,
     LONG_CLIP_ENABLED,
     LONG_CLIP_MAX_TOKENS,
@@ -15,10 +17,20 @@ from src.core.config import (
 )
 
 import numpy as np
-import pyiqa
+
+try:
+    import pyiqa
+except ImportError:
+    pyiqa = None
+
 import torch
 from PIL import Image
-from skimage.metrics import structural_similarity as _ssim
+
+try:
+    from skimage.metrics import structural_similarity as _ssim
+except ImportError:
+    _ssim = None
+
 from torchvision import transforms
 from transformers import CLIPConfig, CLIPModel, CLIPProcessor
 
@@ -65,6 +77,9 @@ def load_evaluators(device: str | None = None) -> QualityEvaluators:
 
     clip_model = clip_model.to(eval_device)
     clip_model.eval()
+
+    if pyiqa is None:
+        raise ImportError("pyiqa is required for load_evaluators. Install pyiqa or run in server environment.")
     clip_iqa = pyiqa.create_metric("clipiqa", device=eval_device)
     pq_transform = transforms.Compose([transforms.ToTensor()])
 
@@ -128,6 +143,8 @@ def compute_ssim(
     original_image: Image.Image,
     generated_image: Image.Image,
 ) -> float:
+    if _ssim is None:
+        raise ImportError("scikit-image is required for compute_ssim.")
     orig_np = np.array(original_image)
     gen_np = np.array(generated_image)
     return float(
@@ -141,3 +158,16 @@ def passes_quality_gate(o_score: float, ssim_val: float) -> bool:
     if ssim_val > SSIM_MAX_THRESHOLD:
         return False
     return True
+
+
+def passes_delta_gate(
+    delta_area_ratio: float,
+    min_area_ratio: float = DELTA_MIN_AREA_RATIO,
+    max_area_ratio: float = DELTA_MAX_AREA_RATIO,
+) -> bool:
+    """
+    Check if the changed area ratio is within acceptable limits.
+    Prevents both negligible edits (< min_area_ratio) and
+    excessive scene destruction (> max_area_ratio).
+    """
+    return min_area_ratio <= delta_area_ratio <= max_area_ratio

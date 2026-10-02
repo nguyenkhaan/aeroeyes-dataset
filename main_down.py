@@ -13,6 +13,7 @@ from src.core.config import (
 )
 from src.helper.image import download_image
 from src.helper.loading_dataset import loading_dataset
+from src.vision.disaster_filter import is_valid_disaster_metadata
 
 
 def main() -> None:
@@ -27,9 +28,11 @@ def main() -> None:
         for image_key, image_info in data.items():
             try:
                 incidents = image_info.get("incidents") or {}
-                if not any(value == 1 for value in incidents.values()):
+                damage = image_info.get("damage")
+                is_valid, reason = is_valid_disaster_metadata(incidents, damage)
+                if not is_valid:
                     skipped += 1
-                    print(f"Skip: {image_key} (No Positive Labels)", flush=True)
+                    print(f"Skip: {image_key} ({reason})", flush=True)
                     continue
 
                 print(f"Downloading: {image_key}", flush=True)
@@ -69,7 +72,7 @@ def main() -> None:
             summary_file.write("\n")
         temporary_summary_path.replace(IMAGE_SUMMARY_PATH)
         print(
-            f"Downloaded: {len(summary)} | Failed: {failed} | No positive labels: {skipped}",
+            f"Downloaded: {len(summary)} | Failed: {failed} | Skipped/filtered: {skipped}",
             flush=True,
         )
         print(f"Image summary: {IMAGE_SUMMARY_PATH}", flush=True)

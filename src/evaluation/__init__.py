@@ -4,7 +4,19 @@ from src.evaluation.quality import (
     compute_ssim,
     evaluate_quality,
     load_evaluators,
+    passes_delta_gate,
     passes_quality_gate,
+)
+from src.evaluation.change_detection import (
+    BoundingBox,
+    ChangeDeltaResult,
+    compute_otsu_threshold,
+    detect_change_delta,
+)
+from src.evaluation.object_matching import (
+    DetectedObject,
+    ObjectMatchingReport,
+    match_and_refine_objects,
 )
 from src.evaluation.cmmd import compute_dataset_cmmd
 from src.evaluation.sdqm import compute_dataset_sdqm, write_sdqm_status_report
@@ -15,18 +27,26 @@ from src.evaluation.yolo_export import export_yolo_dataset, export_yolo_pair
 from src.evaluation.reporting import run_dataset_evaluation
 
 __all__ = [
+    "BoundingBox",
+    "ChangeDeltaResult",
+    "DetectedObject",
+    "ObjectMatchingReport",
     "QualityEvaluators",
     "attach_sdqm_metadata",
     "check_custom_ultralytics",
     "compute_dataset_cmmd",
     "compute_dataset_sdqm",
     "compute_o_score",
+    "compute_otsu_threshold",
     "compute_ssim",
     "compute_vinfo_metrics",
+    "detect_change_delta",
     "evaluate_quality",
     "export_yolo_dataset",
     "export_yolo_pair",
     "load_evaluators",
+    "match_and_refine_objects",
+    "passes_delta_gate",
     "passes_quality_gate",
     "run_sdqm_regression",
     "run_dataset_evaluation",

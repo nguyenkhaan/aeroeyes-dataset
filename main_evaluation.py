@@ -12,8 +12,8 @@ from src.core.config import (
 )
 from src.evaluation import (
     attach_sdqm_metadata, compute_dataset_cmmd, compute_dataset_sdqm,
-    compute_o_score, compute_ssim, evaluate_quality, load_evaluators,
-    passes_quality_gate, write_metadata_jsonl, write_sdqm_status_report,
+    compute_o_score, compute_ssim, detect_change_delta, evaluate_quality, load_evaluators,
+    passes_delta_gate, passes_quality_gate, write_metadata_jsonl, write_sdqm_status_report,
 )
 from src.helper.memory import cleanup
 from src.helper.runtime import stage
@@ -36,13 +36,18 @@ def evaluate_samples(metadata_paths: list[Path]) -> tuple[list[dict], int]:
                     sc_score, pq_score = evaluate_quality(evaluators, generated, record["flux_prompt"])
                     o_score = compute_o_score(sc_score, pq_score)
                     ssim = compute_ssim(original, generated)
+                    delta_result = detect_change_delta(original, generated)
+                    delta_passed = passes_delta_gate(delta_result.delta_area_ratio)
                 records.append({
                     **record,
                     "sc_score": round(sc_score, 4),
                     "pq_score": round(pq_score, 4),
                     "o_score": round(o_score, 4),
                     "ssim": round(ssim, 4),
-                    "quality_passed": passes_quality_gate(o_score, ssim),
+                    "delta_area_ratio": round(delta_result.delta_area_ratio, 4),
+                    "delta_mean": round(delta_result.mean_delta, 4),
+                    "delta_box_count": delta_result.box_count,
+                    "quality_passed": passes_quality_gate(o_score, ssim) and delta_passed,
                 })
             except Exception as exc:
                 failures += 1

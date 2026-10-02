@@ -1,3 +1,9 @@
+from src.vision.disaster_filter import (
+    DisasterVisualFilter,
+    is_valid_disaster_metadata,
+)
+
+
 def build_flux_prompt(
     scene_description: str,
     rescue_instruction: str,
@@ -34,3 +40,10 @@ Requirements
     - Non-cinematic
 """
     return prompt.strip()
+
+
+__all__ = [
+    "DisasterVisualFilter",
+    "build_flux_prompt",
+    "is_valid_disaster_metadata",
+]

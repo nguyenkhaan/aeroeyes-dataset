@@ -221,6 +221,44 @@ SDQM_RUN_REGRESSION = os.getenv("SDQM_RUN_REGRESSION", "true").lower() in (
 SDQM_MIN_REGRESSION_ROWS = int(os.getenv("SDQM_MIN_REGRESSION_ROWS", "3"))
 SDQM_MIN_IMAGES = 2
 SDQM_SUMMARY_PATH = str(Path(SDQM_OUTPUT_DIR) / "sdqm_summary.md")
+
+# ----------------------------------------------------------
+# Disaster Filtering Configuration
+# ----------------------------------------------------------
+VALID_DISASTER_CLASSES = (
+    "earthquake",
+    "flood",
+    "wildfire",
+    "landslide",
+    "mudslide",
+    "hurricane",
+    "tornado",
+    "volcanic_eruption",
+    "tsunami",
+    "avalanche",
+    "collapsed_building",
+    "structural_damage",
+)
+
+DISCARD_INCIDENT_CLASSES = (
+    "traffic_jam",
+    "blocked_road",
+    "car_accident",
+    "protest",
+    "construction",
+    "fog",
+)
+
+DISASTER_CLIP_THRESHOLD = float(os.getenv("DISASTER_CLIP_THRESHOLD", "0.55"))
+
+# ----------------------------------------------------------
+# Change Detection & Delta Bounding Box Configuration
+# ----------------------------------------------------------
+DELTA_INTENSITY_THRESHOLD = float(os.getenv("DELTA_INTENSITY_THRESHOLD", "25.0"))
+DELTA_MIN_AREA_RATIO = float(os.getenv("DELTA_MIN_AREA_RATIO", "0.01"))
+DELTA_MAX_AREA_RATIO = float(os.getenv("DELTA_MAX_AREA_RATIO", "0.60"))
+DELTA_MORPH_KERNEL_SIZE = int(os.getenv("DELTA_MORPH_KERNEL_SIZE", "7"))
+
 # ----------------------------------------------------------
 # HTTP Headers
 # ----------------------------------------------------------
