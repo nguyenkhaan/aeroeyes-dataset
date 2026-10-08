@@ -26,8 +26,23 @@ from src.core.config import (
 )
 
 
-def _normalize_incident_name(name: str) -> str:
-    return name.lower().replace("_", " ").strip()
+INCIDENT_LABEL_ALIASES = {
+    "flooded": "flood",
+    "flooding": "flood",
+    "on fire": "wildfire",
+    "forest fire": "wildfire",
+    "building collapse": "collapsed building",
+    "collapsed": "structural damage",
+    "tropical cyclone": "hurricane",
+    "snowslide avalanche": "avalanche",
+    "mudslide mudflow": "mudslide",
+    "rockslide rockfall": "landslide",
+}
+
+
+def normalize_incident_name(name: str) -> str:
+    normalized = " ".join(name.lower().replace("_", " ").split())
+    return INCIDENT_LABEL_ALIASES.get(normalized, normalized)
 
 
 def is_valid_disaster_metadata(
@@ -46,7 +61,7 @@ def is_valid_disaster_metadata(
         return False, "Missing or empty incidents metadata"
 
     active_incidents = {
-        _normalize_incident_name(cls)
+        normalize_incident_name(cls)
         for cls, val in incidents.items()
         if val == 1 or val is True or str(val).lower() == "true"
     }
@@ -54,11 +69,12 @@ def is_valid_disaster_metadata(
     if not active_incidents:
         return False, "No positive incident labels"
 
-    norm_discard = {_normalize_incident_name(c) for c in discard_classes}
-    norm_valid = {_normalize_incident_name(c) for c in valid_classes}
-
-    discard_matches = active_incidents.intersection(norm_discard)
-    valid_matches = active_incidents.intersection(norm_valid)
+    discard_matches = active_incidents.intersection(
+        {normalize_incident_name(c) for c in discard_classes}
+    )
+    valid_matches = active_incidents.intersection(
+        {normalize_incident_name(c) for c in valid_classes}
+    )
 
     if discard_matches and not valid_matches:
         return False, f"Non-disaster incident only: {', '.join(sorted(discard_matches))}"

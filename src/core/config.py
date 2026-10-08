@@ -20,7 +20,7 @@ except ImportError:
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_STORAGE_DIR = Path(
-    "/datastore/cndt_khanhnd/models/aeroeyes_model"
+    "/datastore/khanhnd/models/aeroeyes_model"
 )
 MODEL_STORAGE_DIR = Path(
     os.getenv("AEROEYES_MODEL_DIR", str(DEFAULT_MODEL_STORAGE_DIR))
@@ -81,7 +81,7 @@ JSON_PATH = os.getenv(
     "JSON_PATH",
     str(PROJECT_ROOT / "data" / "input" / "eccv_train.json"),
 )
-OUTPUT_STORAGE_DIR = Path("/datastore/cndt_khanhnd/models/aeroeyes_output")
+OUTPUT_STORAGE_DIR = Path("/datastore/khanhnd/models/aeroeyes_output")
 OUTPUT_DIR = str(OUTPUT_STORAGE_DIR / "output")
 DOWNLOAD_IMAGES_DIR = OUTPUT_STORAGE_DIR / "download_images"
 IMAGE_SUMMARY_PATH = OUTPUT_STORAGE_DIR / "image_summary.json"
@@ -239,52 +239,21 @@ SDQM_SUMMARY_PATH = str(Path(SDQM_OUTPUT_DIR) / "sdqm_summary.md")
 VALID_DISASTER_CLASSES = (
     "earthquake",
     "flood",
-    "flooded",
-    "flooding",
     "wildfire",
-    "forest fire",
-    "forest_fire",
-    "on fire",
-    "on_fire",
-    "burning",
-    "burning building",
-    "burning_building",
-    "building collapse",
-    "bridge collapse",
-    "dam collapse",
-    "collapsed",
-    "collapsed building",
-    "collapsed_building",
-    "structural damage",
-    "structural_damage",
     "landslide",
     "mudslide",
-    "rockslide",
     "hurricane",
     "tornado",
-    "cyclone",
-    "typhoon",
-    "tsunami",
-    "volcanic eruption",
     "volcanic_eruption",
-    "volcano",
-    "lava flow",
-    "lava_flow",
+    "tsunami",
     "avalanche",
-    "sinkhole",
-    "blizzard",
-    "heavy rainfall",
-    "heavy_rainfall",
-    "hailstorm",
-    "storm",
+    "collapsed_building",
+    "structural_damage",
 )
 
 DISCARD_INCIDENT_CLASSES = (
-    "traffic jam",
     "traffic_jam",
-    "blocked road",
     "blocked_road",
-    "car accident",
     "car_accident",
     "protest",
     "construction",

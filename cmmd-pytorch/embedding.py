@@ -21,7 +21,7 @@ from pathlib import Path
 _MODEL_STORAGE_DIR = Path(
     os.getenv(
         "AEROEYES_MODEL_DIR",
-        "/datastore/cndt_khanhnd/models/aeroeyes_model",
+        "/datastore/khanhnd/models/aeroeyes_model",
     )
 )
 _HF_HOME = _MODEL_STORAGE_DIR / "huggingface"

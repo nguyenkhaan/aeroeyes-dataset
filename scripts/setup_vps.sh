@@ -6,7 +6,7 @@ BOOTSTRAP_PYTHON="${BOOTSTRAP_PYTHON:-python}"
 VENV_DIR="${VENV_DIR:-$ROOT_DIR/venv}"
 VENV_PYTHON="$VENV_DIR/bin/python"
 EXPECTED_PYTORCH_CUDA="${EXPECTED_PYTORCH_CUDA:-12.8}"
-MODEL_STORAGE_DIR="${AEROEYES_MODEL_DIR:-/datastore/cndt_khanhnd/models/aeroeyes_model}"
+MODEL_STORAGE_DIR="${AEROEYES_MODEL_DIR:-/datastore/khanhnd/models/aeroeyes_model}"
 INCOMPATIBLE_CUDA_PACKAGES=(
   cuda-bindings
   cuda-pathfinder
@@ -72,8 +72,8 @@ print(f"PyTorch {torch.__version__} compiled for CUDA {torch.version.cuda}.")
 PY
 
 mkdir -p "$ROOT_DIR/logs" "$ROOT_DIR/data/input" \
-  /datastore/cndt_khanhnd/models/aeroeyes_output/download_images \
-  /datastore/cndt_khanhnd/models/aeroeyes_output/output \
+  /datastore/khanhnd/models/aeroeyes_output/download_images \
+  /datastore/khanhnd/models/aeroeyes_output/output \
   "$MODEL_STORAGE_DIR/huggingface/hub" \
   "$MODEL_STORAGE_DIR/huggingface/assets" \
   "$MODEL_STORAGE_DIR/huggingface/xet" \

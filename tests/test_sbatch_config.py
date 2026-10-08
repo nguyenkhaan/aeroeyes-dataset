@@ -25,7 +25,7 @@ class SbatchConfigurationTests(unittest.TestCase):
         self.assertIn("export CMMD_REPO_DIR=", script)
         self.assertIn("export SDQM_REPO_DIR=", script)
         self.assertIn(
-            "/datastore/cndt_khanhnd/models/aeroeyes_model",
+            "/datastore/khanhnd/models/aeroeyes_model",
             script,
         )
         self.assertIn("export HF_HUB_CACHE=", script)

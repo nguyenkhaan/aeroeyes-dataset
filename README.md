@@ -15,6 +15,12 @@ clone them separately.
 
 ## VPS setup
 
+On UIT HPC, prepare source files on the login node and run environment setup,
+CPU/GPU processing, and CUDA checks inside a Slurm allocation. Store the project,
+virtual environment, package caches, model weights, datasets, and logs under
+`/datastore/khanhnd`. Direct execution examples below apply inside an allocated
+compute node.
+
 ```bash
 git clone <repository-url> aeroeyes-dataset
 cd aeroeyes-dataset
@@ -38,12 +44,17 @@ before installing the remaining dependencies.
 bash scripts/setup_vps.sh
 ```
 
-The Slurm environment uses CUDA 12.8, so do not install a `+cu130` PyTorch
-wheel. For a manual repair, run the bootstrap script with the same interpreter
-used by Slurm:
+The project pins PyTorch wheels built for CUDA 12.8. The migrated UIT HPC server
+exposes `slurm/slurm/25.05`, `cuda12.9/toolkit/12.9.1`, and `python312` modules.
+Keep the `cu128` wheel requirements and verify the NVIDIA driver and CUDA runtime
+on the allocated compute node before running workloads; the toolkit module
+version alone does not establish runtime compatibility. See
+[NVIDIA's CUDA compatibility guidance](https://docs.nvidia.com/deploy/cuda-compatibility/why-cuda-compatibility.html).
+For a manual repair, run the bootstrap script with the same interpreter used by
+Slurm:
 
 ```bash 
-VENV_DIR=/datastore/cndt_khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
+VENV_DIR=/datastore/khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
   bash scripts/setup_vps.sh
 ```
 
@@ -56,28 +67,68 @@ python main.py
 python main_evaluation.py
 ```
 
-The local `sbatch.slurm` runs generation followed by evaluation. This file is
-Git-ignored; copy its changes to the server separately. It also evaluates saved
-partial results when generation exits with code 2, preserving that exit status.
-For downloading under Slurm, replace its generation/evaluation commands with
-`python main_down.py` using the configured Python interpreter.
+The local `sbatch.slurm` currently runs evaluation only (`main_evaluation.py`)
+after its CUDA probe and preflight. This file is Git-ignored; copy its changes
+to the server separately. Downloading and generation require separate Slurm
+jobs invoking `main_down.py` and `main.py` with the configured Python interpreter.
 
 `main_down.py` reads `JSON_PATH` (default: `data/input/eccv_train.json`);
-set `JSON_PATH` if your dataset JSON is in the output directory. It downloads
-all records with at least one positive disaster label (`incidents` value `1`) to
-`/datastore/cndt_khanhnd/models/aeroeyes_output/download_images/` as lossless RGB PNG files. The original dataset
+set `JSON_PATH` or pass `--json-path` for a different dataset JSON. It downloads
+records accepted by the disaster metadata whitelist and damage filter to
+`/datastore/khanhnd/models/aeroeyes_output/download_images/` as lossless RGB PNG files. The original dataset
 keys and metadata (including labels and source URLs) are stored together with
-`downloaded_file` in `/datastore/cndt_khanhnd/models/aeroeyes_output/image_summary.json`. Failed downloads or
+`downloaded_file` in `/datastore/khanhnd/models/aeroeyes_output/image_summary.json`. Failed downloads or
 invalid images are logged and skipped without stopping the remaining downloads.
-Records with missing or empty `incidents`, or no value equal to `1`, are skipped
-before downloading and are not included in the summary. Every download run scans
-the entire JSON; `LIMIT_IMAGES` applies only to AI generation in `main.py`.
-The summary is replaced atomically when the loop finishes or unwinds through
-a Python exception; a forced process kill cannot save the current summary.
-Rerunning this step downloads the dataset again and rebuilds the summary.
+Non-disaster records and records marked only `little_or_no_damage` are skipped.
+Use `--limit 5000` to stop once 5,000 readable images are available, including
+cached images. Failed downloads do not count toward the target. Without a limit,
+the script scans the whole JSON; `LIMIT_IMAGES` still controls only generation.
+Rerunning preserves valid cached records, verifies images, and downloads only
+missing or corrupt images. A smaller target does not trim existing valid records.
+Cached records absent from the selected JSON or rejected by the current metadata
+filter are removed from the summary; image files are not deleted.
+The summary is checkpointed atomically every 25 completed records and at exit.
+Images saved before a forced process kill can be recovered on the next run.
+A requested target that cannot be reached returns exit code 2 and retains progress.
+An invalid existing summary stops the job without replacing that file.
+
+### Rebuild an input subset on the migrated UIT HPC server
+
+Incidents dataset metadata supplies image URLs and labels; see the
+[authors' dataset instructions](https://github.com/ethanweber/IncidentsDataset#obtain-the-data).
+Upload your existing metadata JSON to `data/input/` under the project.
+The data-recovery bundle supplies Linux Python 3.12 wheels for a small download
+environment using Pillow, requests, and python-dotenv. Copy its `wheels/*.whl`
+files to `downloads/wheels/` before submitting the download job.
+
+From the project directory on the login node:
+
+```bash
+mkdir -p data/input logs downloads/wheels
+sbatch --test-only scripts/download_incidents.slurm 100 data/input/eccv_train.json
+sbatch scripts/download_incidents.slurm 100 data/input/eccv_train.json
+```
+
+Use your actual JSON filename. `--test-only` validates the allocation without
+submitting a job. The job requests one CPU and 8 GB RAM in `normal`, account
+`uit`, QOS `mig2-35`; it requests no GPU. Scheduler acceptance must be confirmed
+on the server. It refuses execution outside Slurm or on a login node, keeps its
+environment and caches in your datastore, and locks the shared output directory
+to prevent concurrent download jobs from rewriting the summary.
+Logs are `logs/download_<job-id>.out` and `.err`. If the job reaches its six-hour
+wall time, submitting it again resumes saved images. After checking the 100-image
+trial, use target `5000` for the input pool. Honor the school rule requiring one
+hour between job submissions, even when a preceding job has finished.
+
+Downloaded input images do not replace missing generated before/after pairs.
+Without the previous results, generate a small new set of pairs and verify the
+bounding-box stage before scaling to 500. The current evaluation entry point
+computes delta statistics and the quality gate; object matching/refinement is
+not yet connected to it. Grounding DINO's existing YOLO export does not apply
+`match_and_refine_objects` to its detections.
 
 If the download job was interrupted, run `python main_label.py` to rebuild
-`/datastore/cndt_khanhnd/models/aeroeyes_output/image_summary.json` from the images already on disk without
+`/datastore/khanhnd/models/aeroeyes_output/image_summary.json` from the images already on disk without
 downloading them again. Alternatively, replace `main.py` with `main_label.py`
 in the final Python command in `sbatch.slurm`. Use the same `JSON_PATH` dataset
 as the download job: the script matches each original key to its SHA-256 PNG
@@ -92,7 +143,7 @@ tools once and loads FLUX. FLUX stays resident in VRAM throughout rendering;
 there is no CPU offload or per-image model swapping. Both phases checkpoint to
 disk, so interrupted work can resume without repeating completed samples.
 Generation artifacts, reference pairs, and metadata live under
-`/datastore/cndt_khanhnd/models/aeroeyes_output/output`.
+`/datastore/khanhnd/models/aeroeyes_output/output`.
 These storage paths are fixed in `src/core/config.py`; old `OUTPUT_DIR`,
 `REAL_IMAGES_DIR`, and `GEN_IMAGES_DIR` environment values do not redirect them.
 SDQM report, history, and summary paths also stay under this output directory.
@@ -114,11 +165,11 @@ sbatch sbatch.slurm
 
 The default Slurm allocation is **72 hours**, controlled by `#SBATCH --time`,
 with 20 GB of system memory.
-The batch script runs GPU selection, the CUDA allocation/synchronization probe,
-preflight, generation (68-hour shell timeout), and evaluation (4-hour shell
-timeout). Each step logs
-`START`, `END`, or `FAILED`; command failures stop the job. Python logs are
-unbuffered. The CUDA probe has a 60-second timeout.
+The batch script runs `nvidia-smi` (15-second timeout), the CUDA
+allocation/synchronization probe (60-second timeout), preflight (5-minute
+timeout), and evaluation (72-hour shell timeout). Slurm enforces the total job
+wall time, including the preceding checks. Each step logs `START`, `END`, or
+`FAILED`; command failures stop the job. Python logs are unbuffered.
 
 The former `JOB_TIMEOUT_SECONDS`, `STARTUP_TIMEOUT_SECONDS`, and
 `PREFLIGHT_TIMEOUT_SECONDS` variables are no longer used by the batch script.
@@ -169,11 +220,11 @@ The lifecycle follows [PyTorch's allocator guidance](https://docs.pytorch.org/do
 emptying the cache cannot free live model tensors. FLUX's VAE tiling uses the
 [Diffusers Flux2 implementation](https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/autoencoders/autoencoder_kl_flux2.py).
 
-For a small diagnostic run:
+For an evaluation run with a shorter Slurm allocation:
 
 ```bash
 mkdir -p logs
-sbatch --export=ALL,LIMIT_IMAGES=1,MAX_ATTEMPTS=10,MAX_CONSECUTIVE_ERRORS=3 sbatch.slurm
+sbatch --time=01:00:00 sbatch.slurm
 ```
 
 Use the same job ID for `logs/job_<id>.out` and `logs/job_<id>.err`. The last
@@ -196,7 +247,7 @@ python3 -m unittest discover -s tests -p test_pipeline_limits.py
 All downloaded model weights and model caches are stored below:
 
 ```text
-/datastore/cndt_khanhnd/models/aeroeyes_model/
+/datastore/khanhnd/models/aeroeyes_model/
 ├── huggingface/
 ├── torch/
 └── ultralytics/
@@ -209,7 +260,7 @@ project does not use its local `.cache` directory for model storage.
 
 ```bash
 export PYTHON="$PWD/venv/bin/python"
-export AEROEYES_MODEL_DIR="/datastore/cndt_khanhnd/models/aeroeyes_model"
+export AEROEYES_MODEL_DIR="/datastore/khanhnd/models/aeroeyes_model"
 "$PYTHON" scripts/preflight_evaluation.py --require-cuda
 ```
 
@@ -229,9 +280,9 @@ sbatch --export=ALL,PYTHON="$PYTHON",AEROEYES_MODEL_DIR="$AEROEYES_MODEL_DIR" sb
 Outputs:
 
 ```text
-/datastore/cndt_khanhnd/models/aeroeyes_output/output/evaluation_report.csv
-/datastore/cndt_khanhnd/models/aeroeyes_output/output/evaluation_metadata.jsonl
-/datastore/cndt_khanhnd/models/aeroeyes_output/output/sdqm/sdqm_report.json
-/datastore/cndt_khanhnd/models/aeroeyes_output/output/sdqm/sdqm_values.csv
-/datastore/cndt_khanhnd/models/aeroeyes_output/output/sdqm/sdqm_summary.md
+/datastore/khanhnd/models/aeroeyes_output/output/evaluation_report.csv
+/datastore/khanhnd/models/aeroeyes_output/output/evaluation_metadata.jsonl
+/datastore/khanhnd/models/aeroeyes_output/output/sdqm/sdqm_report.json
+/datastore/khanhnd/models/aeroeyes_output/output/sdqm/sdqm_values.csv
+/datastore/khanhnd/models/aeroeyes_output/output/sdqm/sdqm_summary.md
 ```

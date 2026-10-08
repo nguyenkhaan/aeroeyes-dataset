@@ -52,6 +52,29 @@ class DisasterFilterTests(unittest.TestCase):
         self.assertFalse(is_valid_disaster_metadata({"traffic_jam": 1})[0])
         self.assertFalse(is_valid_disaster_metadata({"car accident": 1})[0])
 
+    def test_accepts_disaster_names_observed_in_download_logs(self) -> None:
+        for label in ("tropical cyclone", "snowslide avalanche", "collapsed"):
+            with self.subTest(label=label):
+                self.assertTrue(is_valid_disaster_metadata({label: 1})[0])
+
+    def test_new_aliases_still_require_positive_labels_and_physical_damage(self) -> None:
+        for label in ("tropical cyclone", "snowslide avalanche", "collapsed"):
+            with self.subTest(label=label):
+                self.assertFalse(is_valid_disaster_metadata({label: 0})[0])
+                self.assertFalse(is_valid_disaster_metadata(
+                    {label: 1}, {"little_or_no_damage": 1},
+                )[0])
+
+    def test_smoke_or_drought_alone_do_not_count_as_whitelisted_disasters(self) -> None:
+        for label in ("with smoke", "drought"):
+            with self.subTest(label=label):
+                self.assertFalse(is_valid_disaster_metadata({label: 1})[0])
+
+    def test_accepts_dataset_names_for_mudslides_and_rockslides(self) -> None:
+        for label in ("mudslide mudflow", "rockslide rockfall"):
+            with self.subTest(label=label):
+                self.assertTrue(is_valid_disaster_metadata({label: 1})[0])
+
 
 if __name__ == "__main__":
     unittest.main()

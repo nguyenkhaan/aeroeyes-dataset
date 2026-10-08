@@ -47,7 +47,7 @@ class VpsSetupScriptTests(unittest.TestCase):
 
         self.assertIn('mkdir -p "$ROOT_DIR/logs"', script)
         self.assertIn(
-            "/datastore/cndt_khanhnd/models/aeroeyes_model",
+            "/datastore/khanhnd/models/aeroeyes_model",
             script,
         )
         self.assertNotIn('"$ROOT_DIR/.cache"', script)

@@ -1,7 +1,8 @@
 import requests
 from PIL import Image
-import os 
-import torch 
+import os
+
+
 def download_image(
     url: str,
     headers=None,
@@ -25,9 +26,14 @@ def download_image(
 
             return response.content
 
-        except Exception as e:
+        except requests.RequestException as error:
+            if isinstance(error, requests.HTTPError) and error.response is not None:
+                status = error.response.status_code
+                if 400 <= status < 500:
+                    print(f"[Skip HTTP {status}] {error}")
+                    return None
             print(
-                f"[Retry {attempt+1}/{retries}] {e}"
+                f"[Retry {attempt+1}/{retries}] {error}"
             )
     return None
 
@@ -94,6 +100,8 @@ def generate_rescue_image(
     """
     Generate a rescue simulation image using FLUX2-klein-4B.
     """
+    import torch
+
     generator = torch.Generator(
         device="cpu"
     ).manual_seed(seed)

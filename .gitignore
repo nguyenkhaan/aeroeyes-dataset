@@ -183,3 +183,6 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 data/input/eccv_train.json
 tasks
+
+key_khanhnd
+id_ecdsa.pub
