@@ -1,0 +1,13 @@
+# Runtime dependencies for main.py. PyTorch is installed separately from
+# requirements-pytorch-cu128.txt so pip cannot replace the CUDA build.
+accelerate==1.14.0
+diffusers==0.39.0
+huggingface_hub==1.26.1
+numpy==2.5.1
+opencv-python-headless==4.14.0.94
+pillow==12.3.0
+python-dotenv==1.2.2
+requests==2.34.2
+safetensors==0.8.0
+sentencepiece==0.2.2
+transformers==5.14.1

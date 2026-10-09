@@ -58,6 +58,40 @@ VENV_DIR=/datastore/khanhnd/aeroeyes_cloudian/aeroeyes-dataset/venv \
   bash scripts/setup_vps.sh
 ```
 
+For a generation-only trial on UIT HPC, use the smaller tracked Slurm setup
+job instead. It installs PyTorch from the CUDA 12.8 manifest first and then
+installs only the dependencies imported by `main.py`, so the general
+requirements file cannot replace the selected PyTorch build:
+
+```bash
+mkdir -p logs
+sbatch --test-only scripts/setup_generation.slurm
+sbatch scripts/setup_generation.slurm
+```
+
+After the setup job reports `COMPLETED` with exit code `0:0`, submit a five-image
+GPU trial:
+
+```bash
+sbatch --test-only scripts/generate_images.slurm 5
+sbatch scripts/generate_images.slurm 5
+```
+
+The trial uses 512×512 images and disables watermark removal to reduce model
+downloads and GPU memory use. It still runs Gemma prompt preparation followed
+by FLUX image generation. Both jobs must be submitted from the project root.
+Honor the cluster's required interval between submissions.
+
+Follow the trial without exposing `.env`:
+
+```bash
+squeue -u "$USER"
+tail -f "$(ls -t logs/generate_*.out | head -n 1)"
+```
+
+Generated pairs and resumable metadata are written below
+`/datastore/khanhnd/models/aeroeyes_output/output/`.
+
 ### Run code  
 Run the download once, then generation and evaluation as separate processes:
 
