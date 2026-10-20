@@ -1,0 +1,20 @@
+schema_version: 1
+benchmark_version: bbox-gt-v1
+selection:
+  seed: 20261020
+  validation_pairs: 40
+  test_pairs: 60
+  strategy: grouped_stratified
+  challenge_subset: validation_only
+quality_control:
+  double_annotation_fraction: 0.20
+  minimum_test_instances_per_class: 20
+  require_adjudication: true
+evaluation:
+  primary_iou_threshold: 0.50
+  coco_iou_thresholds:
+    start: 0.50
+    stop: 0.95
+    step: 0.05
+  diagnostic_iou_threshold: 0.30
+  insufficient_class_policy: report_insufficient_data

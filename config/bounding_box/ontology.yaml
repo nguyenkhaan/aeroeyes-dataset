@@ -1,0 +1,95 @@
+version: "1.0.0"
+classes:
+  - id: 0
+    name: firefighter
+    definition: >-
+      A person visibly identifiable as a firefighter through protective gear,
+      uniform, helmet, breathing apparatus, firefighting activity, or scene context.
+    automatic_aliases:
+      - firefighter
+      - firefighters
+      - fire fighter
+      - fire fighters
+    review_terms:
+      - rescue worker
+      - emergency responder
+      - rescue personnel
+      - paramedic
+      - police officer
+
+  - id: 1
+    name: rescue_boat
+    definition: >-
+      A boat or raft visibly used for rescue, evacuation, emergency response,
+      or transportation of affected people in a disaster scene.
+    automatic_aliases:
+      - rescue boat
+      - rescue boats
+      - inflatable rescue boat
+      - inflatable rescue raft
+      - emergency boat
+    review_terms:
+      - boat
+      - raft
+      - inflatable boat
+
+  - id: 2
+    name: helicopter
+    definition: >-
+      A helicopter introduced or used as part of rescue or emergency response.
+    automatic_aliases:
+      - helicopter
+      - helicopters
+      - rescue helicopter
+      - emergency helicopter
+    review_terms:
+      - aircraft
+      - rescue aircraft
+
+  - id: 3
+    name: ambulance
+    definition: >-
+      A road vehicle visibly identifiable as an ambulance. This class is
+      mutually exclusive with emergency_vehicle.
+    automatic_aliases:
+      - ambulance
+      - ambulances
+      - emergency ambulance
+    review_terms:
+      - medical vehicle
+      - emergency medical vehicle
+
+  - id: 4
+    name: emergency_vehicle
+    definition: >-
+      A fire engine, rescue truck, or other visibly marked emergency response
+      road vehicle that is not an ambulance.
+    automatic_aliases:
+      - emergency vehicle
+      - emergency vehicles
+      - fire truck
+      - fire engine
+      - rescue truck
+    review_terms:
+      - rescue vehicle
+      - emergency car
+
+annotation_states:
+  is_newly_added:
+    - "true"
+    - "false"
+    - "ambiguous"
+  is_valid_rescue:
+    - "true"
+    - "false"
+    - "ambiguous"
+  occlusion:
+    - none
+    - partial
+    - heavy
+  generation_status:
+    - valid
+    - missing_requested_object
+    - invalid_object
+    - severe_scene_corruption
+    - ambiguous
