@@ -195,6 +195,9 @@ phiên bản mới và ghi changelog.
 
 ### Bước 2.1: Viết evaluation harness
 
+**Trạng thái triển khai**: đã viết harness và unit test; chờ xác nhận trên UIT
+HPC trước khi commit giai đoạn 2.
+
 Tạo `src/evaluation/bbox_metrics.py` và CLI
 `scripts/evaluate_bounding_boxes.py`. Đầu vào là ground truth manifest và reports
 JSON của pipeline. Matching prediction–GT phải một-một, cùng lớp, theo confidence
@@ -230,6 +233,8 @@ Test phải bao phủ: duplicate predictions, wrong class, no prediction, no GT,
 IoU ngay dưới/trên ngưỡng, một prediction cạnh tranh hai GT và lớp thiếu dữ liệu.
 
 ### Bước 2.2: Chạy baseline đã đóng băng
+
+**Trạng thái triển khai**: chờ artifact `bbox-gt-v1` đã annotation và adjudicate.
 
 Chạy code hiện tại trên validation mà chưa tune. Lưu manifest gồm Git commit,
 model ID/revision, prompt, ontology version, threshold, seed, dataset checksum,

@@ -73,3 +73,55 @@ Không bắt đầu annotation nếu:
 
 Tập validation được phép dùng để tuning. Tập test chỉ được mở sau khi cấu hình
 pipeline cuối đã được khóa.
+
+## Đánh giá bounding box
+
+Artifact ground truth dùng cho evaluation phải giữ cấu trúc `pairs` của
+manifest và bổ sung `generation_status`, `before_objects`, `after_objects` theo
+schema trong guideline. Mỗi object After bắt buộc có `object_id`, `class_name`,
+`bbox_xyxy`, `is_newly_added` và `is_valid_rescue`.
+
+Chạy baseline trên validation bằng lệnh:
+
+```bash
+venv/bin/python scripts/evaluate_bounding_boxes.py \
+  --ground-truth /datastore/khanhnd/models/aeroeyes_output/bbox_benchmark/bbox-gt-v1.json \
+  --predictions /datastore/khanhnd/models/aeroeyes_output/output/bounding_boxes/reports \
+  --split validation \
+  --run-manifest /datastore/khanhnd/models/aeroeyes_output/bbox_benchmark/baseline-run.yaml \
+  --output /datastore/khanhnd/models/aeroeyes_output/bbox_benchmark/baseline-validation-metrics.json
+```
+
+Sao chép `config/bounding_box/run-manifest.example.yaml` để tạo run manifest,
+sau đó thay toàn bộ giá trị `REPLACE_WITH_*` bằng thông tin thực tế. Lưu Git
+commit, model ID/revision, prompt, threshold, checksum ground truth, phiên bản
+Python/Torch/CUDA, GPU, thời gian chạy và peak VRAM trước khi so sánh các cấu
+hình.
+
+CLI mặc định chỉ đánh giá `validation`. Chỉ dùng `--split test` sau khi đã khóa
+pipeline cuối. `--split all` dành cho kiểm tra artifact, không dùng để tuning
+hoặc công bố kết quả test.
+
+Metrics JSON tách riêng:
+
+- `generation`: tỷ lệ cặp sinh ảnh hợp lệ;
+- `detector`: detection trên mọi rescue object hợp lệ trong ảnh After;
+- `change_verification`: phân loại new/existing trên các object detector đã bắt
+  được tại IoU 0.50, kèm coverage để không che detector miss;
+- `final_pipeline`: kết quả cuối trên newly-added valid rescue objects;
+- `pair_pass_rate`: chỉ số vận hành bổ trợ;
+- `failure_taxonomy`: lỗi sinh ảnh theo pair; các nguyên nhân bỏ sót loại trừ
+  nhau theo object; và false positive prediction được báo ở trường riêng;
+- `performance`: runtime và peak VRAM nếu report có cung cấp.
+
+AP dùng nội suy 101 điểm. `AP50` và `mAP50:95` tổng hợp macro trên các lớp có
+ground truth; Precision/Recall/F1 tổng hợp micro. Lớp không có ground truth trả
+về `insufficient_data`. Recall tại IoU 0.30 chỉ dùng để chẩn đoán box định vị
+thô, không dùng làm kết quả chính.
+
+Kiểm tra implementation:
+
+```bash
+venv/bin/python -m unittest tests.test_bbox_metrics
+venv/bin/python scripts/evaluate_bounding_boxes.py --help
+```
