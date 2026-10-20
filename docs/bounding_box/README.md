@@ -62,6 +62,56 @@ Không bắt đầu annotation nếu:
 - có ảnh bị thiếu hoặc checksum không đọc được;
 - ontology hoặc guideline vẫn còn điểm chưa thống nhất.
 
+Nếu mọi `source_group_method` đều là `pair_id_fallback`, validation và test chỉ
+được chứng minh là không trùng `pair_id`. Chưa thể khẳng định hai ảnh gần trùng
+hoặc cùng sự kiện nguồn không nằm ở hai split. Phải ghi hạn chế này trong báo
+cáo và không dùng benchmark này để tuyên bố khả năng tổng quát hóa theo sự kiện.
+
+## Chuẩn bị bundle cho CVAT
+
+Tạo bundle sau khi manifest đã vượt qua các kiểm tra trên:
+
+```bash
+venv/bin/python scripts/prepare_bbox_annotation.py \
+  --manifest /datastore/khanhnd/models/aeroeyes_output/bbox_benchmark/bbox-gt-v1-manifest.json \
+  --output-dir /datastore/khanhnd/models/aeroeyes_output/bbox_benchmark/annotation-bundle
+```
+
+Script kiểm tra lại SHA-256 của 200 ảnh trước khi đóng gói và tạo:
+
+- `validation-images.zip` và `test-images.zip` cho annotation chính;
+- hai archive `*-double-annotation-images.zip` chứa đúng 20% cặp được chọn tái
+  lập để người thứ hai gán độc lập;
+- `annotation-mapping.json` ánh xạ tên frame CVAT về `pair_id` và Before/After;
+- `cvat-labels.json` chứa năm rectangle label cùng `pair_status` tag;
+- `bbox-gt-v1.template.json` làm khung cho artifact sau khi convert export CVAT.
+- `bundle-summary.json` lưu count và SHA-256 của toàn bộ artifact trong bundle.
+
+Tên frame có dạng `0000__00_before__<pair_id>` và
+`0000__01_after__<pair_id>`, do đó Before và After của mỗi cặp nằm liền nhau khi
+CVAT dùng thứ tự lexicographical. Không đổi tên frame sau khi tạo bundle.
+
+Khi tạo task CVAT:
+
+1. Tạo hai task chính riêng cho validation và test.
+2. Dán nội dung `cvat-labels.json` vào tab **Raw** của phần Labels hoặc truyền
+   file này qua `cvat-cli`.
+3. Upload archive tương ứng, chọn thứ tự **Lexicographical**, và đặt segment
+   size là số chẵn để một job không cắt đôi cặp Before/After.
+4. Chỉ vẽ rectangle cho năm lớp ontology.
+5. Trên frame After, đặt `is_newly_added`, `is_valid_rescue`,
+   `occlusion_level`; thêm đúng một tag `pair_status` và chọn
+   `generation_status`.
+6. Trên frame Before, vẽ mọi object thuộc ontology; các thuộc tính After được
+   bỏ qua khi convert.
+7. Tạo hai task độc lập cho archive double annotation và giao cho annotator thứ
+   hai. Không cho annotator thứ hai xem nhãn của task chính.
+8. Export bằng **CVAT for images 1.1** để giữ rectangle, tag và custom
+   attributes.
+
+CVAT không tự tạo đầy đủ custom attributes khi chỉ import dataset, vì vậy label
+schema phải được cấu hình trước khi annotation.
+
 ## Quy trình annotation
 
 1. Annotator đọc guideline và gán thử 10 cặp calibration.

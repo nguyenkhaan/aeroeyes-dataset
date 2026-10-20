@@ -175,6 +175,9 @@ hiện ở cả validation và test, test pass.
 
 ### Bước 1.3: Gán nhãn và kiểm tra chất lượng
 
+**Trạng thái triển khai**: manifest 100 cặp đã tạo; annotation bundle generator
+đã viết, chờ kiểm tra trên UIT HPC và annotation thủ công trong CVAT.
+
 Import cả Before và After vào CVAT theo guideline. Double-annotate tối thiểu 20%
 số cặp, sau đó adjudicate bất đồng về class, new/existing và box. CVAT hỗ trợ
 consensus annotation; nếu không dùng chức năng này, lưu bảng bất đồng và kết quả
