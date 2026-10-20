@@ -112,6 +112,47 @@ Khi tạo task CVAT:
 CVAT không tự tạo đầy đủ custom attributes khi chỉ import dataset, vì vậy label
 schema phải được cấu hình trước khi annotation.
 
+## Kiểm tra pilot và chuyển export CVAT
+
+Sau 10 cặp calibration, export task bằng **CVAT for images 1.1** rồi tạo artifact
+pilot. Cờ `--allow-incomplete` chỉ dùng trong giai đoạn này:
+
+```bash
+BENCH_DIR=/datastore/khanhnd/models/aeroeyes_output/bbox_benchmark
+BUNDLE_DIR="$BENCH_DIR/annotation-bundle"
+
+venv/bin/python scripts/convert_cvat_bbox_annotations.py \
+  --template "$BUNDLE_DIR/bbox-gt-v1.template.json" \
+  --mapping "$BUNDLE_DIR/annotation-mapping.json" \
+  --cvat-export "$BENCH_DIR/cvat/validation-pilot.zip" \
+  --output "$BENCH_DIR/bbox-gt-v1.validation-pilot.json" \
+  --split validation \
+  --allow-incomplete
+```
+
+File `bbox-gt-v1.validation-pilot.summary.json` liệt kê cặp chưa làm và cặp còn
+`ambiguous`. Một cặp chỉ được tính là hoàn tất khi ảnh After có đúng một tag
+`pair_status`. Vì vậy cặp không có object vẫn phải có tag này. Trước khi khóa
+artifact, xử lý mọi mục trong `unresolved` và không để thuộc tính object After ở
+trạng thái `ambiguous`.
+
+Khi đã gán đủ một split, chạy lại không có `--allow-incomplete`. Converter sẽ
+từ chối khóa artifact nếu thiếu tag, còn nhãn mơ hồ, trùng frame, sai tên frame,
+box ngoài biên hoặc dùng label ngoài ontology:
+
+```bash
+venv/bin/python scripts/convert_cvat_bbox_annotations.py \
+  --template "$BUNDLE_DIR/bbox-gt-v1.template.json" \
+  --mapping "$BUNDLE_DIR/annotation-mapping.json" \
+  --cvat-export "$BENCH_DIR/cvat/validation-main.zip" \
+  --output "$BENCH_DIR/bbox-gt-v1.validation.json" \
+  --split validation
+```
+
+Mỗi nguồn export được lưu kèm tên task, task ID và SHA-256 trong artifact để có
+thể truy vết. Không dùng export từ task double annotation làm nhãn chính trước
+khi hoàn tất bước so sánh bất đồng và adjudication.
+
 ## Quy trình annotation
 
 1. Annotator đọc guideline và gán thử 10 cặp calibration.
