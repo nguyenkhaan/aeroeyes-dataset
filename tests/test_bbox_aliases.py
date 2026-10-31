@@ -1,9 +1,18 @@
 import unittest
 
-from src.evaluation.bbox_aliases import build_alias_map, normalize_label, resolve_label
+from src.evaluation.bbox_aliases import build_alias_map, normalize_label, resolve_label, experiment_alias_map
 
 
 class BoundingBoxAliasTests(unittest.TestCase):
+    def test_compound_mapping_is_opt_in_and_only_maps_the_explicit_label(self) -> None:
+        base = {"firefighter": "firefighter", "fire_fighter": "firefighter"}
+        control = experiment_alias_map(base, "exact")
+        candidate = experiment_alias_map(base, "firefighter_compound")
+        self.assertEqual(resolve_label("firefighter fire fighter", control), "firefighter_fire_fighter")
+        self.assertEqual(resolve_label("firefighter fire fighter", candidate), "firefighter")
+        self.assertEqual(resolve_label("firefighter rescue boat", candidate), "firefighter_rescue_boat")
+        self.assertNotIn("firefighter_fire_fighter", base)
+
     def setUp(self) -> None:
         self.classes = {"firefighter": 0, "rescue_boat": 1, "emergency_vehicle": 4}
         self.ontology = {

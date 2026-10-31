@@ -387,6 +387,26 @@ cho biết số label sau postprocess, số lần alias tự động được d�
 không map được. Đây là số detection trước lọc bổ sung/NMS trên cả Before và
 After, không phải số object thật hay số object duy nhất.
 
+### Thử ánh xạ nhãn ghép firefighter
+
+Job 8095 có nhiều label thô `firefighter_fire_fighter`. Phép thử tiếp theo
+chỉ ánh xạ chính xác label này thành `firefighter`; các label ghép nhiều lớp
+vẫn không được tự động ánh xạ. Đây là giả thuyết cần đo, không đảm bảo đúng
+về mặt thị giác hoặc cải thiện recall. Chế độ mặc định `exact` không đổi.
+
+Sau khi commit, chạy lại hai cấu hình có cùng prompt mở rộng, chỉ khác
+`label_mapping_mode`, trên cùng bản ground truth và cùng commit:
+
+```bash
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-prompt-aliases.json 40
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-prompt-compound.json 40
+```
+
+So sánh hai job mới bằng `--vary label_mapping_mode`. Để so với prompt gốc,
+chạy thêm `dino-prompt-control.json` ở cùng commit và dùng `--vary prompt`
+để so với job `dino-prompt-aliases.json`. Không dùng trực tiếp các job 8094/8095
+cho comparator do khác commit. Giữ ground truth cố định giữa các job.
+
 Để kiểm tra selection và checksum không dùng GPU, chọn một thư mục **chưa tồn tại**:
 
 ```bash

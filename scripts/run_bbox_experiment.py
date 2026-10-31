@@ -70,7 +70,7 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
 
     from src.core.config import SDQM_YOLO_DATA_YAML
     from src.evaluation.bounding_box_pipeline import _process_record
-    from src.evaluation.bbox_aliases import build_alias_map
+    from src.evaluation.bbox_aliases import build_alias_map, experiment_alias_map
     from src.evaluation.grounding_postprocess import grounding_postprocess_parameters
     from src.evaluation.yolo_export import RescueDetector, load_class_map
 
@@ -97,7 +97,7 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
     ontology_bytes = ontology_path.read_bytes()
     ontology_hash = hashlib.sha256(ontology_bytes).hexdigest()
     ontology = yaml.safe_load(ontology_bytes)
-    aliases = build_alias_map(ontology, class_map)
+    aliases = experiment_alias_map(build_alias_map(ontology, class_map), config.label_mapping_mode)
     detector = RescueDetector(
         model_name=config.model_id,
         text_prompt=config.prompt,

@@ -18,11 +18,17 @@ class ExperimentConfig:
     rescue_boat_threshold: float
     nms_iou_threshold: float
     seed: int
+    label_mapping_mode: str = "exact"
 
     @classmethod
     def from_dict(cls, data: dict) -> ExperimentConfig:
-        if not isinstance(data, dict) or set(data) != set(cls.__dataclass_fields__):
+        if not isinstance(data, dict):
+            raise ValueError("Experiment config must be an object")
+        data = {"label_mapping_mode": "exact", **data}
+        if set(data) != set(cls.__dataclass_fields__):
             raise ValueError("Experiment config must contain exactly the documented fields")
+        if data["label_mapping_mode"] not in ("exact", "firefighter_compound"):
+            raise ValueError("Invalid label mapping mode")
         name, model_id, prompt = (data[key] for key in ("name", "model_id", "prompt"))
         if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
             raise ValueError("Experiment name must use only letters, digits, hyphen or underscore")
@@ -41,7 +47,8 @@ class ExperimentConfig:
             if not math.isfinite(value) or not 0 <= value <= 1:
                 raise ValueError(f"{key} must be a number in [0, 1]")
             thresholds[key] = float(value)
-        return cls(name=name, model_id=model_id, prompt=prompt, seed=seed, **thresholds)
+        return cls(name=name, model_id=model_id, prompt=prompt, seed=seed,
+                   label_mapping_mode=data["label_mapping_mode"], **thresholds)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -152,7 +159,7 @@ def select_ground_truth(document: dict, records: list[dict], manifest_hash: str)
 def compare_experiment_runs(baseline: Path, candidate: Path, varying: str) -> dict:
     allowed = {
         "box_threshold", "text_threshold", "rescue_boat_threshold",
-        "nms_iou_threshold", "prompt",
+        "nms_iou_threshold", "prompt", "label_mapping_mode",
     }
     if varying not in allowed:
         raise ValueError(f"Unsupported varying field: {varying}")

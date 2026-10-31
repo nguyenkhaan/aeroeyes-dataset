@@ -111,6 +111,18 @@ class BoundingBoxExperimentTests(unittest.TestCase):
         self.assertEqual(differences, {"name", "prompt"})
         self.assertIn("fire truck", candidate["prompt"])
 
+    def test_compound_experiment_changes_only_label_mapping(self) -> None:
+        def config(name):
+            path = Path("config/bounding_box") / name
+            return ExperimentConfig.from_dict(json.loads(path.read_text(encoding="utf-8"))).as_dict()
+
+        baseline = config("dino-prompt-aliases.json")
+        candidate = config("dino-prompt-compound.json")
+        self.assertEqual({key for key in baseline if baseline[key] != candidate[key]},
+                         {"name", "label_mapping_mode"})
+        self.assertEqual(baseline["label_mapping_mode"], "exact")
+        self.assertEqual(candidate["label_mapping_mode"], "firefighter_compound")
+
     def test_cli_help_does_not_load_gpu_dependencies(self) -> None:
         result = subprocess.run(
             [sys.executable, "scripts/run_bbox_experiment.py", "--help"],

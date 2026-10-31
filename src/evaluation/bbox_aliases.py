@@ -12,6 +12,15 @@ def resolve_label(label: str, aliases: dict[str, str]) -> str:
     return aliases.get(normalized, normalized)
 
 
+def experiment_alias_map(aliases: dict[str, str], mode: str) -> dict[str, str]:
+    result = dict(aliases)
+    if mode == "firefighter_compound":
+        result["firefighter_fire_fighter"] = "firefighter"
+    elif mode != "exact":
+        raise ValueError(f"Unsupported label mapping mode: {mode}")
+    return result
+
+
 def build_alias_map(ontology: dict, class_map: dict[str, int]) -> dict[str, str]:
     if not isinstance(ontology, dict) or not isinstance(ontology.get("classes"), list):
         raise ValueError("Ontology must contain a classes list")
