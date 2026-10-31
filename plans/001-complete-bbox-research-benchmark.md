@@ -176,8 +176,9 @@ hiện ở cả validation và test, test pass.
 ### Bước 1.3: Gán nhãn và kiểm tra chất lượng
 
 **Trạng thái triển khai**: manifest 100 cặp và annotation bundle đã tạo; converter
-CVAT có chế độ pilot/strict đã viết, chờ kiểm tra trên UIT HPC. Annotation thủ
-công và adjudication chưa hoàn tất.
+đã chạy trên UIT HPC. Đã gán 40 cặp validation và gán lần hai độc lập 8 cặp;
+đã tạo danh sách bất đồng. Adjudication tạm hoãn để chạy baseline thăm dò theo
+yêu cầu người dùng. Chưa xác nhận annotation của 60 cặp test.
 
 Import cả Before và After vào CVAT theo guideline. Double-annotate tối thiểu 20%
 số cặp, sau đó adjudicate bất đồng về class, new/existing và box. CVAT hỗ trợ
@@ -199,8 +200,10 @@ phiên bản mới và ghi changelog.
 
 ### Bước 2.1: Viết evaluation harness
 
-**Trạng thái triển khai**: đã viết harness và unit test; chờ xác nhận trên UIT
-HPC trước khi commit giai đoạn 2.
+**Trạng thái triển khai**: harness v1 đã vượt qua test trên UIT HPC và chạy
+baseline thăm dò. Checkpoint v2 thêm one-to-one ignore cho nhãn mơ hồ, coverage
+và regression test; chờ xác nhận checkpoint trên UIT HPC trước khi chuyển sang
+cấu hình detector.
 
 Tạo `src/evaluation/bbox_metrics.py` và CLI
 `scripts/evaluate_bounding_boxes.py`. Đầu vào là ground truth manifest và reports
@@ -238,7 +241,11 @@ IoU ngay dưới/trên ngưỡng, một prediction cạnh tranh hai GT và lớp
 
 ### Bước 2.2: Chạy baseline đã đóng băng
 
-**Trạng thái triển khai**: chờ artifact `bbox-gt-v1` đã annotation và adjudicate.
+**Trạng thái triển khai**: baseline v1 thăm dò đã chạy bằng reports hiện có:
+40 cặp có report, 17 cặp generation valid, 21 ambiguous, 2 failure. Detector
+recall 0.3836, final recall 0.375; precision/AP còn bị ảnh hưởng bởi nhãn mơ hồ.
+Cần chạy lại bằng evaluator v2. Baseline chính thức vẫn chờ adjudication và
+run manifest đầy đủ; kết quả v1/v2 không được so trực tiếp như thay đổi detector.
 
 Chạy code hiện tại trên validation mà chưa tune. Lưu manifest gồm Git commit,
 model ID/revision, prompt, ontology version, threshold, seed, dataset checksum,

@@ -129,13 +129,24 @@ def main() -> int:
     result["run_manifest"] = load_run_manifest(arguments.run_manifest)
     write_json_atomic(arguments.output, result)
     overall = result["final_pipeline"]["overall"]
-    print(f"Evaluated pairs: {result['generation']['total_pairs']}")
+    coverage = result["annotation_coverage"]
+    print(f"Loaded pairs: {coverage['total_pairs']}")
+    print(
+        f"Detection-eligible pairs: {coverage['evaluated_pairs']}; "
+        f"excluded ambiguous: {coverage['excluded_ambiguous_pairs']}; "
+        f"excluded generation failures: {coverage['excluded_generation_failure_pairs']}"
+    )
     print(
         "Final pipeline: "
         f"P={overall['precision']} R={overall['recall']} "
         f"F1={overall['f1']} AP50={overall['ap50']}"
     )
     print(f"Metrics: {arguments.output}")
+    print(
+        "Ignored predictions at IoU 0.50: "
+        f"detector={result['detector']['overall']['ignored_prediction_count']}, "
+        f"final={overall['ignored_prediction_count']}"
+    )
     return 0
 
 

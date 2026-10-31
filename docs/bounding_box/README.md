@@ -210,9 +210,53 @@ ground truth; Precision/Recall/F1 tổng hợp micro. Lớp không có ground tr
 về `insufficient_data`. Recall tại IoU 0.30 chỉ dùng để chẩn đoán box định vị
 thô, không dùng làm kết quả chính.
 
+### Đánh giá có nhãn mơ hồ — protocol v2
+
+`schema_version=2` và `evaluation_protocol.version=bbox-metrics-v2-ambiguity-aware`
+thay đổi cách tính prediction trên vùng mơ hồ. Lưu kết quả vào file mới và chạy
+lại baseline bằng cùng protocol trước khi so sánh cấu hình; không so trực tiếp
+precision/AP với file metrics v1.
+
+- Chỉ cặp `generation_status=valid` tham gia detector/final metrics. Cặp sinh
+  lỗi và cặp generation mơ hồ được thống kê riêng trong `annotation_coverage`.
+- Detector dùng object có `is_valid_rescue=true` làm GT; object có validity mơ
+  hồ là ứng viên ignore. Newness mơ hồ không loại object khỏi detector GT.
+- Pipeline cuối dùng object có cả validity và newness là `true`. Object có thể
+  vừa hợp lệ vừa mới nhưng còn thuộc tính mơ hồ là ứng viên ignore. Object đã
+  xác định `is_valid_rescue=false` hoặc `is_newly_added=false` không che FP cuối.
+- Prediction phải cùng cặp, cùng lớp và đạt IoU của metric đang tính mới được
+  ghép với ignore. Mỗi ứng viên ignore chỉ nhận một prediction. Prediction được
+  ghép với GT chắc chắn trước; prediction trùng một GT chắc chắn đã ghép vẫn là
+  FP, kể cả khi cũng overlap vùng ignore.
+- Ignore được tính lại tại từng ngưỡng IoU cho AP50, mAP50:95 và recall@0.30.
+  Các count trong `overall`/`per_class` báo tại IoU 0.50:
+  `raw_prediction_count = prediction_count + ignored_prediction_count`.
+  `ignored_gt_count` là số ứng viên ignore, không cộng vào mẫu số recall.
+- `failure_taxonomy.false_positive_predictions` dùng cùng chính sách với
+  `final_pipeline`, tránh hai phần báo FP khác nhau.
+
+Đây là chính sách đánh giá có điều kiện trên nhãn xác định được, không tự xác
+nhận một nhãn đã review hay chốt ground truth. Có note và được ignore không
+thay thế adjudication. Khi review còn dang dở, kết quả vẫn là thăm dò; báo cáo
+coverage kèm metric để không diễn giải thành hiệu năng trên toàn bộ 40 cặp.
+
+Chạy lại trên server bằng reports hiện có, không cần GPU:
+
+```bash
+BENCH_DIR=/datastore/khanhnd/models/aeroeyes_output/bbox_benchmark
+RUN_DIR="$BENCH_DIR/runs/baseline-ambiguity-v2-$(date +%Y%m%d-%H%M%S)"
+
+venv/bin/python scripts/evaluate_bounding_boxes.py \
+  --ground-truth "$BENCH_DIR/bbox-gt-v1.validation-review.json" \
+  --predictions /datastore/khanhnd/models/aeroeyes_output/output/bounding_boxes/reports \
+  --split validation \
+  --output "$RUN_DIR/metrics.json"
+```
+
 Kiểm tra implementation:
 
 ```bash
 venv/bin/python -m unittest tests.test_bbox_metrics
+venv/bin/python -m unittest tests.test_bbox_ambiguity
 venv/bin/python scripts/evaluate_bounding_boxes.py --help
 ```

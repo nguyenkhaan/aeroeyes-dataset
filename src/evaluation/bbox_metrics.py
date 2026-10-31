@@ -102,6 +102,7 @@ class MatchResult:
     prediction_count: int
     true_positive_flags: tuple[int, ...]
     matches: tuple[tuple[GroundTruthObject, Prediction, float], ...]
+    ignored_prediction_count: int = 0
 
     @property
     def true_positives(self) -> int:
@@ -117,9 +118,16 @@ class MatchResult:
 
 
 @dataclass(frozen=True)
+class MatchTargets:
+    eligible: Sequence[GroundTruthObject]
+    ignored: Sequence[GroundTruthObject] = ()
+
+
+@dataclass(frozen=True)
 class TierDefinition:
     ground_truth_selector: Callable[[PairData], Sequence[GroundTruthObject]]
     prediction_selector: Callable[[PairData], Sequence[Prediction]]
+    ignored_ground_truth_selector: Callable[[PairData], Sequence[GroundTruthObject]]
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
@@ -348,6 +356,26 @@ def _new_ground_truth(pair: PairData) -> tuple[GroundTruthObject, ...]:
     )
 
 
+def _ambiguous_rescue_ground_truth(pair: PairData) -> tuple[GroundTruthObject, ...]:
+    if pair.generation_status != VALID_GENERATION_STATUS:
+        return ()
+    return tuple(
+        item for item in pair.ground_truth if item.is_valid_rescue == AMBIGUOUS_STATE
+    )
+
+
+def _ambiguous_new_ground_truth(pair: PairData) -> tuple[GroundTruthObject, ...]:
+    if pair.generation_status != VALID_GENERATION_STATUS:
+        return ()
+    return tuple(
+        item
+        for item in pair.ground_truth
+        if item.is_valid_rescue != "false"
+        and item.is_newly_added != "false"
+        and AMBIGUOUS_STATE in {item.is_valid_rescue, item.is_newly_added}
+    )
+
+
 def _valid_detector_predictions(pair: PairData) -> tuple[Prediction, ...]:
     if pair.generation_status != VALID_GENERATION_STATUS:
         return ()
@@ -360,20 +388,37 @@ def _valid_final_predictions(pair: PairData) -> tuple[Prediction, ...]:
     return pair.final_predictions
 
 
+def _best_target(
+    candidates: Iterable[GroundTruthObject],
+    predicted: Prediction,
+    threshold: float,
+) -> tuple[GroundTruthObject, float] | None:
+    overlaps = (
+        (item, item.box.iou(predicted.box))
+        for item in candidates
+        if item.class_name == predicted.class_name
+    )
+    best = max(overlaps, key=lambda item: item[1], default=None)
+    return best if best is not None and best[1] >= threshold else None
+
+
 def _match(
-    ground_truth: Sequence[GroundTruthObject],
+    targets: MatchTargets,
     predictions: Sequence[Prediction],
     threshold: float,
 ) -> MatchResult:
-    available_by_pair: dict[str, set[int]] = defaultdict(set)
     indexed_ground_truth: dict[str, list[GroundTruthObject]] = defaultdict(list)
-    for item in ground_truth:
-        index = len(indexed_ground_truth[item.pair_id])
+    ignored_by_pair: dict[str, list[GroundTruthObject]] = defaultdict(list)
+    for item in targets.eligible:
         indexed_ground_truth[item.pair_id].append(item)
-        available_by_pair[item.pair_id].add(index)
+    for item in targets.ignored:
+        ignored_by_pair[item.pair_id].append(item)
+    used_ground_truth: set[tuple[str, str]] = set()
+    used_ignored: set[tuple[str, str]] = set()
 
     flags: list[int] = []
     matches: list[tuple[GroundTruthObject, Prediction, float]] = []
+    ignored_count = 0
     ordered_predictions = sorted(
         predictions,
         key=lambda item: item.confidence,
@@ -381,28 +426,38 @@ def _match(
     )
     for predicted in ordered_predictions:
         candidates = indexed_ground_truth.get(predicted.pair_id, [])
-        best_index: int | None = None
-        best_iou = -1.0
-        for index in available_by_pair[predicted.pair_id]:
-            candidate = candidates[index]
-            if candidate.class_name != predicted.class_name:
-                continue
-            overlap = candidate.box.iou(predicted.box)
-            if overlap > best_iou:
-                best_index = index
-                best_iou = overlap
-        if best_index is not None and best_iou >= threshold:
-            matched = candidates[best_index]
-            available_by_pair[predicted.pair_id].remove(best_index)
+        available = (
+            item for item in candidates
+            if (item.pair_id, item.object_id) not in used_ground_truth
+        )
+        best = _best_target(available, predicted, threshold)
+        if best is not None:
+            matched, overlap = best
+            used_ground_truth.add((matched.pair_id, matched.object_id))
             flags.append(1)
-            matches.append((matched, predicted, best_iou))
-        else:
+            matches.append((matched, predicted, overlap))
+            continue
+        if _best_target(candidates, predicted, threshold) is not None:
+            # An ignore region must not absorb a duplicate of a known positive.
             flags.append(0)
+            continue
+        available_ignored = (
+            item for item in ignored_by_pair.get(predicted.pair_id, [])
+            if (item.pair_id, item.object_id) not in used_ignored
+        )
+        ignored = _best_target(available_ignored, predicted, threshold)
+        if ignored is not None:
+            item, _overlap = ignored
+            used_ignored.add((item.pair_id, item.object_id))
+            ignored_count += 1
+            continue
+        flags.append(0)
     return MatchResult(
-        ground_truth_count=len(ground_truth),
-        prediction_count=len(predictions),
+        ground_truth_count=len(targets.eligible),
+        prediction_count=len(flags),
         true_positive_flags=tuple(flags),
         matches=tuple(matches),
+        ignored_prediction_count=ignored_count,
     )
 
 
@@ -431,14 +486,20 @@ def _average_precision(result: MatchResult) -> float | None:
 
 
 def _class_metrics(
-    ground_truth: Sequence[GroundTruthObject],
+    targets: MatchTargets,
     predictions: Sequence[Prediction],
     config: EvaluationConfig,
 ) -> dict:
-    primary = _match(ground_truth, predictions, 0.5)
-    diagnostic = _match(ground_truth, predictions, 0.3)
+    primary = _match(targets, predictions, 0.5)
+    diagnostic = _match(targets, predictions, 0.3)
+    ignore_counts = {
+        "raw_prediction_count": len(predictions),
+        "ignored_prediction_count": primary.ignored_prediction_count,
+        "ignored_gt_count": len(targets.ignored),
+    }
     if primary.ground_truth_count == 0:
         return {
+            **ignore_counts,
             "status": "insufficient_data",
             "gt_count": 0,
             "prediction_count": primary.prediction_count,
@@ -459,11 +520,12 @@ def _class_metrics(
         precision = 0.0
     recall = primary.true_positives / primary.ground_truth_count
     average_precisions = [
-        _average_precision(_match(ground_truth, predictions, threshold))
+        _average_precision(_match(targets, predictions, threshold))
         for threshold in config.iou_thresholds
     ]
     matched_ious = [overlap for _gt, _prediction, overlap in primary.matches]
     return {
+        **ignore_counts,
         "status": "ok",
         "gt_count": primary.ground_truth_count,
         "prediction_count": primary.prediction_count,
@@ -491,6 +553,9 @@ def _tier_metrics(
     all_predictions = [
         item for pair in pairs for item in definition.prediction_selector(pair)
     ]
+    ignored_ground_truth = [
+        item for pair in pairs for item in definition.ignored_ground_truth_selector(pair)
+    ]
     per_class: dict[str, dict] = {}
     for class_name in config.class_names:
         class_ground_truth = [
@@ -500,7 +565,12 @@ def _tier_metrics(
             item for item in all_predictions if item.class_name == class_name
         ]
         per_class[class_name] = _class_metrics(
-            class_ground_truth,
+            MatchTargets(
+                eligible=class_ground_truth,
+                ignored=[
+                    item for item in ignored_ground_truth if item.class_name == class_name
+                ],
+            ),
             class_predictions,
             config,
         )
@@ -515,12 +585,17 @@ def _tier_metrics(
     if total_gt and precision is None:
         precision = 0.0
     recall = _ratio(total_tp, total_gt)
-    matched = _match(all_ground_truth, all_predictions, 0.5)
+    matched = _match(
+        MatchTargets(all_ground_truth, ignored_ground_truth), all_predictions, 0.5
+    )
     matched_ious = [overlap for _gt, _prediction, overlap in matched.matches]
     overall = {
         "status": "ok" if total_gt else "insufficient_data",
         "gt_count": total_gt,
         "prediction_count": total_predictions,
+        "raw_prediction_count": len(all_predictions),
+        "ignored_prediction_count": matched.ignored_prediction_count,
+        "ignored_gt_count": len(ignored_ground_truth),
         "tp": total_tp,
         "fp": total_fp,
         "fn": total_fn,
@@ -569,7 +644,7 @@ def _change_verification(pairs: Sequence[PairData]) -> dict:
     predictions = [
         item for pair in pairs for item in _valid_detector_predictions(pair)
     ]
-    matched = _match(ground_truth, predictions, 0.5)
+    matched = _match(MatchTargets(ground_truth), predictions, 0.5)
     pairs_by_id = {pair.pair_id: pair for pair in pairs}
     tp_new = fp_new = tn_existing = fn_new = 0
     for target, predicted, _overlap in matched.matches:
@@ -616,6 +691,29 @@ def _generation_metrics(pairs: Sequence[PairData]) -> dict:
         "ambiguous_pairs": ambiguous_pairs,
         "success_rate": _ratio(valid_pairs, resolved_pairs),
         "status_counts": dict(sorted(counts.items())),
+    }
+
+
+def _annotation_coverage(pairs: Sequence[PairData]) -> dict:
+    evaluated = [pair for pair in pairs if pair.generation_status == VALID_GENERATION_STATUS]
+    objects = [item for pair in evaluated for item in pair.ground_truth]
+    return {
+        "total_pairs": len(pairs),
+        "evaluated_pairs": len(evaluated),
+        "excluded_ambiguous_pairs": sum(
+            pair.generation_status == AMBIGUOUS_STATE for pair in pairs
+        ),
+        "excluded_generation_failure_pairs": sum(
+            pair.generation_status not in {VALID_GENERATION_STATUS, AMBIGUOUS_STATE}
+            for pair in pairs
+        ),
+        "objects_in_evaluated_pairs": len(objects),
+        "ambiguous_validity_objects_in_evaluated_pairs": sum(
+            item.is_valid_rescue == AMBIGUOUS_STATE for item in objects
+        ),
+        "ambiguous_newness_objects_in_evaluated_pairs": sum(
+            item.is_newly_added == AMBIGUOUS_STATE for item in objects
+        ),
     }
 
 
@@ -682,7 +780,8 @@ def _failure_taxonomy(pairs: Sequence[PairData]) -> dict:
     final_predictions = [
         item for pair in pairs for item in _valid_final_predictions(pair)
     ]
-    matched = _match(final_ground_truth, final_predictions, 0.5)
+    ignored = [item for pair in pairs for item in _ambiguous_new_ground_truth(pair)]
+    matched = _match(MatchTargets(final_ground_truth, ignored), final_predictions, 0.5)
     matched_ids = {
         (target.pair_id, target.object_id)
         for target, _prediction, _iou in matched.matches
@@ -758,6 +857,7 @@ def evaluate_benchmark(
         TierDefinition(
             ground_truth_selector=_valid_ground_truth,
             prediction_selector=_valid_detector_predictions,
+            ignored_ground_truth_selector=_ambiguous_rescue_ground_truth,
         ),
     )
     final_pipeline = _tier_metrics(
@@ -766,17 +866,28 @@ def evaluate_benchmark(
         TierDefinition(
             ground_truth_selector=_new_ground_truth,
             prediction_selector=_valid_final_predictions,
+            ignored_ground_truth_selector=_ambiguous_new_ground_truth,
         ),
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "evaluation_protocol": {
+            "version": "bbox-metrics-v2-ambiguity-aware",
+            "ambiguity_policy": {
+                "pair_scope": "generation_status_valid_only",
+                "ignore_matching": "same_pair_same_class_one_to_one",
+                "ignore_iou": "current_metric_iou_threshold",
+                "priority": "eligible_gt_then_duplicate_fp_then_ambiguous_gt",
+                "detector_ignore": "is_valid_rescue_ambiguous",
+                "final_ignore": "potentially_new_and_valid_with_ambiguous_attribute",
+            },
             "primary_iou": 0.5,
             "ap_iou_thresholds": list(config.iou_thresholds),
             "diagnostic_iou": 0.3,
             "class_names": list(config.class_names),
         },
         "generation": _generation_metrics(pairs),
+        "annotation_coverage": _annotation_coverage(pairs),
         "detector": detector,
         "change_verification": _change_verification(pairs),
         "final_pipeline": final_pipeline,
