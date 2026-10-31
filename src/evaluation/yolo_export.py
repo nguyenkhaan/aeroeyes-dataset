@@ -26,6 +26,7 @@ from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
 from src.evaluation.change_detection import BoundingBox
 from src.evaluation.image_files import list_images
+from src.evaluation.grounding_postprocess import GroundingPostprocessRequest, postprocess_grounding
 from src.evaluation.object_matching import DetectedObject
 
 
@@ -151,6 +152,7 @@ class RescueDetector:
     )
     nms_iou_threshold: float = SDQM_NMS_IOU_THRESHOLD
     device: str | None = None
+    postprocess_mode: str | None = field(default=None, init=False)
     _processor: AutoProcessor | None = field(default=None, init=False, repr=False)
     _model: AutoModelForZeroShotObjectDetection | None = field(
         default=None,
@@ -194,21 +196,16 @@ class RescueDetector:
             outputs = self._model(**inputs)
 
         target_sizes = torch.tensor([[height, width]], device=self.device)
-        try:
-            processed = self._processor.post_process_grounded_object_detection(
-                outputs,
-                inputs.input_ids,
+        processed, self.postprocess_mode = postprocess_grounding(
+            self._processor,
+            GroundingPostprocessRequest(
+                outputs=outputs,
+                input_ids=inputs.input_ids,
+                target_sizes=target_sizes,
                 box_threshold=self.box_threshold,
                 text_threshold=self.text_threshold,
-                target_sizes=target_sizes,
-            )
-        except TypeError:
-            processed = self._processor.post_process_grounded_object_detection(
-                outputs,
-                inputs.input_ids,
-                threshold=self.box_threshold,
-                target_sizes=target_sizes,
-            )
+            ),
+        )
         detections = _processed_result_to_objects(
             processed[0],
             DetectionConversionContext(

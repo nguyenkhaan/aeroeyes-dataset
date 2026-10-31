@@ -260,3 +260,98 @@ venv/bin/python -m unittest tests.test_bbox_metrics
 venv/bin/python -m unittest tests.test_bbox_ambiguity
 venv/bin/python scripts/evaluate_bounding_boxes.py --help
 ```
+
+## Thí nghiệm Grounding DINO trên validation
+
+Checkpoint này dùng các report tách riêng cho từng job. Nó chọn ảnh theo
+`bbox-gt-v1-manifest.json`, chỉ lấy split `validation`, kiểm tra SHA-256 ảnh và
+kiểm tra ground truth cùng nguồn trước khi nạp model. Ảnh Before/After khác kích
+thước bị từ chối. Job không ghi vào `output/bounding_boxes` cũ.
+
+Hai cấu hình đầu tiên chỉ khác ngưỡng box:
+
+| Config | Box threshold | Text threshold | Rescue boat threshold | NMS IoU |
+|---|---:|---:|---:|---:|
+| `dino-baseline.json` | 0.25 | 0.25 | 0.33 | 0.50 |
+| `dino-low-threshold.json` | 0.18 | 0.25 | 0.33 | 0.50 |
+
+Cả hai dùng cùng model `IDEA-Research/grounding-dino-tiny`, cùng prompt gốc và
+seed 20261020. Job ghi lại trạng thái deterministic của Torch; seed một mình
+không bảo đảm các phép GPU luôn xác định hoàn toàn.
+`0.18` là điểm thử, chưa phải ngưỡng được chọn. Ngưỡng riêng của `rescue_boat`
+vẫn là 0.33 vì pipeline lấy giá trị lớn hơn giữa ngưỡng box và ngưỡng riêng.
+Như vậy thay đổi 0.25 xuống 0.18 không hạ ngưỡng riêng của lớp thuyền.
+
+Transformer phiên bản cũ dùng tên `box_threshold`, phiên bản mới dùng `threshold`;
+cả hai có thể có `text_threshold`. Job kiểm tra API và dừng nếu không thể áp
+dụng ngưỡng text, để cấu hình được ghi khớp với suy luận. Xem [Hugging Face
+Grounding DINO documentation](https://huggingface.co/docs/transformers/model_doc/grounding-dino).
+
+Trước tiên chạy smoke test **5 cặp cho mỗi cấu hình**:
+
+```bash
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-baseline.json 5
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-low-threshold.json 5
+```
+
+Sau khi cả hai hoàn tất và đã kiểm tra log/metrics, chạy cùng 40 cặp:
+
+```bash
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-baseline.json 40
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-low-threshold.json 40
+```
+
+Theo dõi bằng `squeue -u "$USER"` và `sacct -j <JOB_ID>`; log nằm tại
+`logs/bbox_experiment_<JOB_ID>.out` và `.err`. Mỗi job tạo thư mục mới
+`$BENCH_DIR/runs/bbox-experiment-<JOB_ID>/` gồm reports, visualization, nhãn,
+`ground-truth.selected.json`, `run-manifest.json` và `metrics.json`. Script từ
+chối thư mục đã tồn tại. Run manifest ghi cấu hình, checksum, pair ID, git,
+model revision nếu Hugging Face cung cấp, Python/Torch/Transformers/CUDA, GPU,
+thời gian và peak VRAM.
+
+Subset 5 cặp được lấy cách đều theo `pair_id` đã sắp xếp và là smoke test, không
+đại diện toàn tập. Evaluator chỉ dùng `ground-truth.selected.json` tương ứng nên
+không tính các cặp chưa chạy là FN. Có thể nhận `insufficient_data` khi subset
+không có GT đủ điều kiện. Chỉ so sánh cấu hình trên **cùng pair ID, cùng nhãn,
+cùng protocol evaluator v2**. Ground truth chưa adjudicate và các cặp generation
+mơ hồ vẫn bị loại khỏi detection metrics; ghi rõ coverage khi báo kết quả.
+
+So sánh hai job cùng quy mô bằng ID thực tế của chúng:
+
+```bash
+BENCH_DIR=/datastore/khanhnd/models/aeroeyes_output/bbox_benchmark
+BASE_JOB=<JOB_ID_BASELINE>
+LOW_JOB=<JOB_ID_LOW_THRESHOLD>
+
+venv/bin/python scripts/compare_bbox_experiments.py \
+  --baseline "$BENCH_DIR/runs/bbox-experiment-$BASE_JOB" \
+  --candidate "$BENCH_DIR/runs/bbox-experiment-$LOW_JOB" \
+  --vary box_threshold
+```
+
+Thay hai placeholder `<...>` bằng số job trước khi chạy; dấu `<`/`>` là ký hiệu
+giữ chỗ, không gõ vào shell. Script từ chối so sánh nếu khác pair, GT checksum,
+evaluator version, git commit, hoặc có thay đổi cấu hình ngoài trường được chọn.
+Nó kiểm tra metrics gắn đúng run manifest và không có report bị thiếu. Nếu model
+revision hoặc Git không xác nhận được, hoặc GT chưa khóa, kết quả có warning.
+Script không xác minh được adjudication, kể cả khi converter ghi trạng thái
+`validation_locked`; cần người review xác nhận trước khi công bố metric.
+Kết quả trả chênh lệch precision, recall, AP, FP/FN, thời gian và VRAM. Với thử
+prompt, dùng `--vary prompt` và giữ các trường cấu hình khác giống nhau.
+
+Muốn thử prompt/ngưỡng khác, sao chép một JSON config và đổi `name`, `prompt`
+hoặc ngưỡng; không sửa trực tiếp kết quả đã chạy. Các nhãn detector không khớp
+5 lớp trong `config/sdqm/data.yaml` sẽ bị bỏ qua; alias/prompt mới cần được đánh
+giá riêng và không tự động gán một nhãn mơ hồ vào ontology.
+
+Để kiểm tra selection và checksum không dùng GPU, chọn một thư mục **chưa tồn tại**:
+
+```bash
+BENCH_DIR=/datastore/khanhnd/models/aeroeyes_output/bbox_benchmark
+venv/bin/python scripts/run_bbox_experiment.py \
+  --manifest "$BENCH_DIR/bbox-gt-v1-manifest.json" \
+  --ground-truth "$BENCH_DIR/bbox-gt-v1.validation-review.json" \
+  --config config/bounding_box/dino-baseline.json \
+  --output-dir "$BENCH_DIR/runs/prepare-check-$(date +%Y%m%d-%H%M%S)" \
+  --limit 5 --prepare-only
+```

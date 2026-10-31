@@ -200,10 +200,8 @@ phiên bản mới và ghi changelog.
 
 ### Bước 2.1: Viết evaluation harness
 
-**Trạng thái triển khai**: harness v1 đã vượt qua test trên UIT HPC và chạy
-baseline thăm dò. Checkpoint v2 thêm one-to-one ignore cho nhãn mơ hồ, coverage
-và regression test; chờ xác nhận checkpoint trên UIT HPC trước khi chuyển sang
-cấu hình detector.
+**Trạng thái triển khai**: harness v1 và v2 đã chạy baseline thăm dò trên UIT
+HPC. V2 thêm one-to-one ignore cho nhãn mơ hồ, coverage và regression test.
 
 Tạo `src/evaluation/bbox_metrics.py` và CLI
 `scripts/evaluate_bounding_boxes.py`. Đầu vào là ground truth manifest và reports
@@ -244,8 +242,9 @@ IoU ngay dưới/trên ngưỡng, một prediction cạnh tranh hai GT và lớp
 **Trạng thái triển khai**: baseline v1 thăm dò đã chạy bằng reports hiện có:
 40 cặp có report, 17 cặp generation valid, 21 ambiguous, 2 failure. Detector
 recall 0.3836, final recall 0.375; precision/AP còn bị ảnh hưởng bởi nhãn mơ hồ.
-Cần chạy lại bằng evaluator v2. Baseline chính thức vẫn chờ adjudication và
-run manifest đầy đủ; kết quả v1/v2 không được so trực tiếp như thay đổi detector.
+Evaluator v2 đã chạy: final precision 0.7105, recall 0.375, AP50 0.3353; 30
+prediction được ignore. Baseline chính thức vẫn chờ adjudication và run manifest
+đầy đủ; kết quả v1/v2 không được so trực tiếp như thay đổi detector.
 
 Chạy code hiện tại trên validation mà chưa tune. Lưu manifest gồm Git commit,
 model ID/revision, prompt, ontology version, threshold, seed, dataset checksum,
@@ -293,6 +292,10 @@ Ghi: AP/Recall, mean IoU, runtime/ảnh, peak VRAM, số lỗi cài đặt và t
 human correction ước tính trên một subset cố định.
 
 ### Bước 3.2: Tuning ontology, prompt và threshold
+
+**Trạng thái triển khai**: đã tạo runner validation tách biệt, cấu hình baseline
+và ngưỡng box 0.18 cùng job Slurm. Chờ người dùng review/commit, chạy smoke test
+và benchmark trên UIT HPC. Chưa có bằng chứng recall tăng.
 
 Thêm alias rõ nghĩa; nhãn mơ hồ phải được ghi vào review queue. Sweep threshold
 theo lưới định trước trên validation. Không chọn ngưỡng bằng test.
