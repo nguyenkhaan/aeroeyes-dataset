@@ -294,8 +294,11 @@ human correction ước tính trên một subset cố định.
 ### Bước 3.2: Tuning ontology, prompt và threshold
 
 **Trạng thái triển khai**: đã tạo runner validation tách biệt, cấu hình baseline
-và ngưỡng box 0.18 cùng job Slurm. Chờ người dùng review/commit, chạy smoke test
-và benchmark trên UIT HPC. Chưa có bằng chứng recall tăng.
+và ngưỡng box 0.18 cùng job Slurm. Job 8082/8083 cho cùng metric; giảm riêng text
+threshold từ 0.25 xuống 0.18 (job 8090) tăng detector recall từ 0.3836 lên 0.5068
+và final recall từ 0.3750 lên 0.4861 trên 17 cặp đủ điều kiện. Kết quả thăm dò,
+GT chưa adjudicate. Checkpoint tiếp theo ánh xạ alias ontology và chuẩn bị hai
+config khác nhau duy nhất về prompt; chờ review/commit và chạy trên UIT HPC.
 
 Thêm alias rõ nghĩa; nhãn mơ hồ phải được ghi vào review queue. Sweep threshold
 theo lưới định trước trên validation. Không chọn ngưỡng bằng test.

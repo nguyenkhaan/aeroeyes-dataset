@@ -90,6 +90,27 @@ class BoundingBoxSlurmTests(unittest.TestCase):
 
 
 class GroundingDinoConversionTests(unittest.TestCase):
+    def test_aliases_return_canonical_labels_and_keep_class_thresholds(self) -> None:
+        objects = _processed_result_to_objects(
+            {
+                "boxes": [BoxValue([0, 0, 20, 20]), BoxValue([30, 30, 50, 50]),
+                          BoxValue([60, 60, 80, 80])],
+                "scores": [0.4, 0.31, 0.4],
+                "text_labels": ["fire truck", "emergency boat", "rescue worker"],
+            },
+            DetectionConversionContext(
+                class_map={"emergency_vehicle": 4, "rescue_boat": 1, "firefighter": 0},
+                image_width=100,
+                image_height=100,
+                box_threshold=0.18,
+                class_thresholds={"rescue_boat": 0.33},
+                aliases={"fire_truck": "emergency_vehicle", "emergency_boat": "rescue_boat"},
+            ),
+        )
+
+        self.assertEqual([(item.label, item.class_id) for item in objects],
+                         [("emergency_vehicle", 4)])
+
     def test_processed_detection_keeps_class_confidence_and_clips_box(self) -> None:
         objects = _processed_result_to_objects(
             {

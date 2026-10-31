@@ -341,8 +341,51 @@ prompt, dùng `--vary prompt` và giữ các trường cấu hình khác giống
 
 Muốn thử prompt/ngưỡng khác, sao chép một JSON config và đổi `name`, `prompt`
 hoặc ngưỡng; không sửa trực tiếp kết quả đã chạy. Các nhãn detector không khớp
-5 lớp trong `config/sdqm/data.yaml` sẽ bị bỏ qua; alias/prompt mới cần được đánh
-giá riêng và không tự động gán một nhãn mơ hồ vào ontology.
+5 lớp hoặc alias cho phép trong `ontology.yaml` sẽ bị bỏ qua. Trong các job thí
+nghiệm, chỉ `automatic_aliases` được chuyển tự động về lớp canonical; các
+`review_terms` không được tự động chuyển. NMS và ngưỡng riêng áp dụng trên lớp
+canonical; ví dụ `emergency boat` vẫn phải qua ngưỡng `rescue_boat=0.33`.
+
+### Thử mở rộng prompt bằng alias ontology
+
+Sau thử nghiệm `text_threshold=0.18`, `firefighter` tăng recall trên validation
+nhưng `emergency_vehicle` vẫn còn nhiều FN. Hai config sau có cùng model, seed,
+ngưỡng box 0.18, ngưỡng text 0.18 và mapping alias; chỉ khác prompt:
+
+- `dino-prompt-control.json`: prompt 5 lớp gốc;
+- `dino-prompt-aliases.json`: thêm `fire fighter`, `fire truck`, `fire engine`,
+  `rescue truck`, đều thuộc `automatic_aliases` của ontology hiện tại.
+
+Chạy lại **cả hai** sau khi commit checkpoint này vì code mapping đã thay đổi.
+Không dùng job 8090 làm control trực tiếp cho phép so sánh prompt: nó dùng commit
+trước khi có mapping alias. Prompt mở rộng có thể tăng FP hoặc sinh nhãn không
+khớp ontology, không mặc định cải thiện recall.
+
+```bash
+# Smoke test; sau khi kiểm tra thành công, thay 5 bằng 40 cho cả hai job.
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-prompt-control.json 5
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-prompt-aliases.json 5
+```
+
+Khi hai job hoàn tất, so sánh bằng `scripts/compare_bbox_experiments.py` với
+`--vary prompt`. Thay hai số ID bằng ID thực tế:
+
+```bash
+BENCH_DIR=/datastore/khanhnd/models/aeroeyes_output/bbox_benchmark
+BASE_JOB=1234  # ID của dino-prompt-control
+ALIAS_JOB=5678 # ID của dino-prompt-aliases
+
+venv/bin/python scripts/compare_bbox_experiments.py \
+  --baseline "$BENCH_DIR/runs/bbox-experiment-$BASE_JOB" \
+  --candidate "$BENCH_DIR/runs/bbox-experiment-$ALIAS_JOB" \
+  --vary prompt
+```
+
+Run manifest ghi SHA-256 của ontology và class map; comparator từ chối khi các
+hash này khác nhau và cảnh báo nếu run cũ không có hash. `label_mapping_counts`
+cho biết số label sau postprocess, số lần alias tự động được dùng và số label
+không map được. Đây là số detection trước lọc bổ sung/NMS trên cả Before và
+After, không phải số object thật hay số object duy nhất.
 
 Để kiểm tra selection và checksum không dùng GPU, chọn một thư mục **chưa tồn tại**:
 

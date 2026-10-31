@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass, field
 from math import ceil, floor
 from pathlib import Path
@@ -25,6 +25,7 @@ from tqdm import tqdm
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
 from src.evaluation.change_detection import BoundingBox
+from src.evaluation.bbox_aliases import normalize_label, resolve_label
 from src.evaluation.image_files import list_images
 from src.evaluation.grounding_postprocess import GroundingPostprocessRequest, postprocess_grounding
 from src.evaluation.object_matching import DetectedObject
@@ -44,14 +45,8 @@ def load_class_map(yaml_path: str | Path) -> dict[str, int]:
     return {str(name).lower(): index for index, name in enumerate(names)}
 
 
-def _normalize_label(label: str) -> str:
-    cleaned = label.strip().lower()
-    cleaned = re.sub(r"[^a-z0-9]+", "_", cleaned)
-    return cleaned.strip("_")
-
-
 def _label_to_class_id(label: str, class_map: dict[str, int]) -> int | None:
-    normalized = _normalize_label(label)
+    normalized = normalize_label(label)
     candidates = [
         normalized,
         normalized.replace("_", " "),
@@ -70,6 +65,7 @@ class DetectionConversionContext:
     image_height: int
     box_threshold: float
     class_thresholds: dict[str, float]
+    aliases: dict[str, str] = field(default_factory=dict)
 
 
 def _processed_result_to_objects(
@@ -85,8 +81,8 @@ def _processed_result_to_objects(
         strict=False,
     ):
         label_text = str(label)
-        normalized_label = _normalize_label(label_text)
-        class_id = _label_to_class_id(label_text, context.class_map)
+        normalized_label = resolve_label(label_text, context.aliases)
+        class_id = _label_to_class_id(normalized_label, context.class_map)
         if class_id is None:
             continue
         confidence = float(score)
@@ -147,12 +143,16 @@ class RescueDetector:
     box_threshold: float = SDQM_BOX_THRESHOLD
     text_threshold: float = SDQM_TEXT_THRESHOLD
     class_map: dict[str, int] = field(default_factory=dict)
+    aliases: dict[str, str] = field(default_factory=dict)
     class_thresholds: dict[str, float] = field(
         default_factory=lambda: dict(DEFAULT_CLASS_THRESHOLDS)
     )
     nms_iou_threshold: float = SDQM_NMS_IOU_THRESHOLD
     device: str | None = None
     postprocess_mode: str | None = field(default=None, init=False)
+    raw_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    alias_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    unmapped_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     _processor: AutoProcessor | None = field(default=None, init=False, repr=False)
     _model: AutoModelForZeroShotObjectDetection | None = field(
         default=None,
@@ -206,6 +206,14 @@ class RescueDetector:
                 text_threshold=self.text_threshold,
             ),
         )
+        for label in processed[0].get("text_labels", processed[0].get("labels", [])):
+            normalized = normalize_label(str(label))
+            canonical = resolve_label(str(label), self.aliases)
+            self.raw_label_counts[normalized] += 1
+            if _label_to_class_id(canonical, self.class_map) is None:
+                self.unmapped_label_counts[normalized] += 1
+            elif canonical != normalized:
+                self.alias_label_counts[normalized] += 1
         detections = _processed_result_to_objects(
             processed[0],
             DetectionConversionContext(
@@ -214,6 +222,7 @@ class RescueDetector:
                 image_height=height,
                 box_threshold=self.box_threshold,
                 class_thresholds=self.class_thresholds,
+                aliases=self.aliases,
             ),
         )
         return _class_aware_nms(detections, self.nms_iou_threshold)

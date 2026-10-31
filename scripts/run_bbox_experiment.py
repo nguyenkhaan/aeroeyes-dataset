@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import random
@@ -64,10 +65,12 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
     import numpy as np
     import torch
     import transformers
+    import yaml
     from PIL import Image
 
     from src.core.config import SDQM_YOLO_DATA_YAML
     from src.evaluation.bounding_box_pipeline import _process_record
+    from src.evaluation.bbox_aliases import build_alias_map
     from src.evaluation.grounding_postprocess import grounding_postprocess_parameters
     from src.evaluation.yolo_export import RescueDetector, load_class_map
 
@@ -85,6 +88,16 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
             if before.size != after.size:
                 raise ValueError(f"Before/After image sizes differ for {record['stem']}")
 
+    ontology_path = PROJECT_ROOT / "config" / "bounding_box" / "ontology.yaml"
+    class_map_path = Path(SDQM_YOLO_DATA_YAML)
+    class_map_hash = sha256_file(class_map_path)
+    class_map = load_class_map(class_map_path)
+    if sha256_file(class_map_path) != class_map_hash:
+        raise ValueError("Detector class map changed while loading")
+    ontology_bytes = ontology_path.read_bytes()
+    ontology_hash = hashlib.sha256(ontology_bytes).hexdigest()
+    ontology = yaml.safe_load(ontology_bytes)
+    aliases = build_alias_map(ontology, class_map)
     detector = RescueDetector(
         model_name=config.model_id,
         text_prompt=config.prompt,
@@ -92,7 +105,8 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
         text_threshold=config.text_threshold,
         class_thresholds={"rescue_boat": config.rescue_boat_threshold},
         nms_iou_threshold=config.nms_iou_threshold,
-        class_map=load_class_map(SDQM_YOLO_DATA_YAML),
+        class_map=class_map,
+        aliases=aliases,
         device="cuda",
     )
     detector.load()
@@ -121,6 +135,13 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
         ),
         "model_revision": getattr(model_config, "_commit_hash", None),
         "postprocess_mode": detector.postprocess_mode,
+        "ontology_sha256": ontology_hash,
+        "class_map_sha256": class_map_hash,
+        "label_mapping_counts": {
+            "raw_labels": dict(sorted(detector.raw_label_counts.items())),
+            "automatic_aliases": dict(sorted(detector.alias_label_counts.items())),
+            "unmapped_labels": dict(sorted(detector.unmapped_label_counts.items())),
+        },
         "torch": torch.__version__,
         "transformers": transformers.__version__,
         "cuda_build": torch.version.cuda,

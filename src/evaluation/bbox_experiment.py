@@ -221,6 +221,12 @@ def compare_experiment_runs(baseline: Path, candidate: Path, varying: str) -> di
         warnings.append("Tracked working tree was dirty or unknown during at least one run")
     if first_result.get("gpu") != second_result.get("gpu"):
         warnings.append("GPU hardware differs between runs")
+    for field in ("ontology_sha256", "class_map_sha256"):
+        left, right = first_result.get(field), second_result.get(field)
+        if left != right:
+            raise ValueError(f"Runs use different {field}")
+        if not left:
+            warnings.append(f"{field} unavailable; identical label mapping is not verified")
     tiers = {}
     for name in ("detector", "final_pipeline"):
         first_overall = runs[0][1][name]["overall"]
@@ -246,12 +252,14 @@ def compare_experiment_runs(baseline: Path, candidate: Path, varying: str) -> di
                 "peak_vram_bytes": first_result.get("peak_vram_bytes"),
                 "gpu": first_result.get("gpu"),
                 "model_revision": revision_a,
+                "label_mapping_counts": first_result.get("label_mapping_counts"),
             },
             "candidate": {
                 "elapsed_seconds": second.get("elapsed_seconds"),
                 "peak_vram_bytes": second_result.get("peak_vram_bytes"),
                 "gpu": second_result.get("gpu"),
                 "model_revision": revision_b,
+                "label_mapping_counts": second_result.get("label_mapping_counts"),
             },
         },
         "tiers": tiers,

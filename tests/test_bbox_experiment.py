@@ -99,6 +99,18 @@ class BoundingBoxExperimentTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     ExperimentConfig.from_dict({**good, field: value})
 
+    def test_prompt_configs_change_only_prompt_and_run_name(self) -> None:
+        baseline = ExperimentConfig.from_dict(json.loads(
+            Path("config/bounding_box/dino-prompt-control.json").read_text(encoding="utf-8")
+        )).as_dict()
+        candidate = ExperimentConfig.from_dict(json.loads(
+            Path("config/bounding_box/dino-prompt-aliases.json").read_text(encoding="utf-8")
+        )).as_dict()
+        differences = {key for key in baseline if baseline[key] != candidate[key]}
+
+        self.assertEqual(differences, {"name", "prompt"})
+        self.assertIn("fire truck", candidate["prompt"])
+
     def test_cli_help_does_not_load_gpu_dependencies(self) -> None:
         result = subprocess.run(
             [sys.executable, "scripts/run_bbox_experiment.py", "--help"],
@@ -256,6 +268,21 @@ class BoundingBoxExperimentTests(unittest.TestCase):
         (candidate / "metrics.json").write_bytes((baseline / "metrics.json").read_bytes())
 
         with self.assertRaisesRegex(ValueError, "not bound"):
+            compare_experiment_runs(baseline, candidate, "box_threshold")
+
+    def test_compare_rejects_different_ontology_hashes(self) -> None:
+        baseline = self.write_completed_run("baseline", 0.25)
+        candidate = self.write_completed_run("candidate", 0.18)
+        for path, hash_value in ((baseline, "hash-a"), (candidate, "hash-b")):
+            manifest_path = path / "run-manifest.json"
+            metrics_path = path / "metrics.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+            manifest["result"]["ontology_sha256"] = hash_value
+            metrics["run_manifest"] = manifest
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            metrics_path.write_text(json.dumps(metrics), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "different ontology_sha256"):
             compare_experiment_runs(baseline, candidate, "box_threshold")
 
 
