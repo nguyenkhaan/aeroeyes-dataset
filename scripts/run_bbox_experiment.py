@@ -114,6 +114,9 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
         device="cuda",
     )
     detector.load()
+    if config.vehicle_clip_filter:
+        from src.evaluation.bbox_vehicle_clip_filter import VehicleConflictClipFilter
+        detector.vehicle_clip_filter = VehicleConflictClipFilter(device="cuda")
     _box_parameter, supports_text = grounding_postprocess_parameters(detector._processor)
     if not supports_text:
         raise RuntimeError(
@@ -131,7 +134,7 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
             "this experiment cannot be compared safely."
         )
     model_config = getattr(detector._model, "config", None)
-    return {
+    result = {
         "processed_pairs": len(results),
         "passed_pairs": sum(bool(item["bbox_passed"]) for item in results),
         "confirmed_rescue_objects": sum(
@@ -159,6 +162,13 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
         "cudnn_deterministic": torch.backends.cudnn.deterministic,
         "cudnn_benchmark": torch.backends.cudnn.benchmark,
     }
+    if config.vehicle_clip_filter:
+        from src.evaluation.bbox_vehicle_clip_filter import CONFLICT_IOU, CONTEXT, MODEL_ID, MODEL_REVISION, PROMPTS
+        result["vehicle_clip_filter"] = {"model_id": MODEL_ID, "model_revision": MODEL_REVISION,
+                                         "prompts": PROMPTS, "context": CONTEXT,
+                                         "conflict_iou": CONFLICT_IOU, "margin_threshold": 0.0,
+                                         "counts": dict(sorted(detector.vehicle_clip_counts.items()))}
+    return result
 
 
 def main() -> int:

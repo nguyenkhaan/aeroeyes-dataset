@@ -153,12 +153,15 @@ class RescueDetector:
     device: str | None = None
     supplemental_prompts: list[dict] = field(default_factory=list)
     cross_class_iou_threshold: float | None = None
+    vehicle_clip_filter: object | None = None
     postprocess_mode: str | None = field(default=None, init=False)
     raw_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     alias_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     unmapped_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     supplemental_prompt_counts: dict[str, Counter] = field(default_factory=dict, init=False, repr=False)
     cross_class_conflict_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    vehicle_clip_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    last_clip_decisions: list[dict] = field(default_factory=list, init=False, repr=False)
     _processor: AutoProcessor | None = field(default=None, init=False, repr=False)
     _model: AutoModelForZeroShotObjectDetection | None = field(
         default=None,
@@ -201,6 +204,14 @@ class RescueDetector:
         if self.cross_class_iou_threshold is not None:
             detections, removed = suppress_ambulance_conflicts(detections, self.cross_class_iou_threshold)
             self.cross_class_conflict_counts.update({"images_processed": 1, "ambulance_suppressed": removed})
+        self.last_clip_decisions = []
+        if self.vehicle_clip_filter is not None:
+            if self.cross_class_iou_threshold is not None:
+                raise ValueError("CLIP and unconditional cross-class suppression cannot be combined")
+            detections, self.last_clip_decisions = self.vehicle_clip_filter.apply(image, detections)
+            self.vehicle_clip_counts.update({"images_processed": 1,
+                                             "conflicts": len(self.last_clip_decisions),
+                                             "ambulance_suppressed": sum(item["suppressed"] for item in self.last_clip_decisions)})
         return detections
 
     def _detect_prompt(self, image: Image.Image, prompt: str) -> list[DetectedObject]:

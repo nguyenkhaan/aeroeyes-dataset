@@ -608,3 +608,35 @@ or CLIP inference. The rule was chosen after viewing validation examples, so
 the comparison is exploratory and does not estimate held-out performance. The
 job currently requests the same available MIG queue as the other experiments;
 the replay itself does not perform GPU inference.
+
+## Fresh inference with optional CLIP filtering
+
+`dino-ambulance-clip.json` enables the CLIP filter in the experimental
+Grounding DINO pipeline. The control `dino-ambulance-min030.json` leaves it
+disabled; their only policy difference is `vehicle_clip_filter`. The filter
+uses `openai/clip-vit-base-patch16` revision
+`57c216476eefef5ab752ec549e440a49ae4ae5f3`, the same prompts, 10% crop context,
+IoU >= 0.75 and zero margin rule as the replay. It applies to both images after
+same-class NMS, before Before/After matching. It cannot be combined with the
+unconditional cross-class suppression policy. With the option disabled, no
+CLIP model is loaded and the original behavior is retained.
+
+Each filtered report contains `vehicle_clip_decisions` with the original
+pre-filter detection index, box, both similarities, margin and suppression
+decision for each conflict. The run manifest records the CLIP revision, rule,
+prompts and counters. These diagnostics do not turn CLIP scores into
+probabilities. A pinned model revision may need downloading the first time.
+
+Run the two arms using the same commit and strict-v2 ground truth:
+
+```bash
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-ambulance-min030.json 40
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-ambulance-clip.json 40
+```
+
+Evaluate both runs with `scripts/evaluate_bbox_strict_v2.py` and compare their
+precision/recall and per-class counts; use `compare_bbox_experiments.py --vary
+vehicle_clip_filter` to check that other configuration fields match. Compare
+the new metrics with replay 8280 as a reproducibility check, not an assumption:
+fresh GPU inference can differ. Validation results are exploratory and must not
+be presented as held-out test performance.
