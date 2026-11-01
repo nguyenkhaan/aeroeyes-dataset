@@ -584,3 +584,27 @@ score distribution against the unchanged strict-v2 ground truth in a separate
 analysis step. Any threshold selection is exploratory on validation; the held
 out test set must not be used for tuning. Raw score improvements alone must not
 be presented as an improvement in final pipeline recall or precision.
+
+## Replay the zero-margin policy
+
+`scripts/replay_bbox_vehicle_clip.py` uses the frozen baseline detections and
+CLIP scores. In both Before and After it removes an ambulance detection only
+when it conflicts with a predicted emergency vehicle at IoU >= 0.75 and CLIP's
+ambulance similarity minus fire-truck similarity is <= 0. It recomputes the
+change mask and matching, then evaluates the candidate and the original run
+with the same strict-v2 ground truth. It first requires the original delta,
+matching, and saved strict-v2 metrics to reproduce. It checks the source images,
+reports, scores, selection logic, evaluator and ground-truth hashes, and refuses
+incomplete, inconsistent or duplicate scores. No original artifacts are changed.
+
+```bash
+mkdir -p logs
+sbatch scripts/bbox_clip_replay.slurm 8252 8276
+```
+
+The job writes `strict-v2-results/clip-replay-JOBID.json` and prints overall
+and ambulance results for both arms. This is an offline replay, not a fresh DINO
+or CLIP inference. The rule was chosen after viewing validation examples, so
+the comparison is exploratory and does not estimate held-out performance. The
+job currently requests the same available MIG queue as the other experiments;
+the replay itself does not perform GPU inference.
