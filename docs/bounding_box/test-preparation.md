@@ -22,6 +22,11 @@
   kết luận test độc lập khi chưa xác định được nhóm sự kiện. Cần kiểm tra khả
   năng khôi phục nguồn hoặc thống nhất và ghi rõ giới hạn protocol trước khi
   gán nhãn toàn bộ / công bố kết quả. Không tự đổi split đã có annotation.
+- Audit trên server khớp 100/100 ảnh trong `image_summary.json`; các trường ghi
+  nhận gồm `downloaded_file`, `incidents`, `places`, `url`, không có bốn trường
+  mã sự kiện đã kiểm tra. Bốn kiểm tra trùng chính xác giữa split đều bằng 0.
+  Đây là kết quả của summary, không khẳng định metadata gốc hoàn toàn không có
+  thông tin sự kiện và không loại trừ ảnh gần trùng.
 - Runner và strict-v2 adapter/evaluator hiện dành cho validation; chưa dùng
   chúng để chạy hoặc chấm 60 cặp test. Cần triển khai và kiểm tra riêng sau khi
   protocol cùng artifact GT test được xác nhận.
@@ -78,6 +83,19 @@ không khôi phục được, ghi rõ test chỉ tách theo cặp; không mô t�
 theo sự kiện.
 
 ## Chuẩn bị CVAT sau khi thống nhất protocol
+
+Xuất prompt gốc theo cặp và tên frame CVAT từ metadata; lệnh từ chối ghi đè,
+kiểm tra mapping khớp manifest và báo số instruction bị thiếu:
+
+```bash
+BENCH_DIR=/datastore/khanhnd/models/aeroeyes_output/bbox_benchmark
+venv/bin/python scripts/export_bbox_generation_prompts.py \
+  --manifest "$BENCH_DIR/bbox-gt-v1-manifest.json" \
+  --mapping "$BENCH_DIR/annotation-bundle/annotation-mapping.json" \
+  --metadata-dir /datastore/khanhnd/models/aeroeyes_output/output/_metadata \
+  --split test \
+  --output "$BENCH_DIR/test-generation-prompts.json"
+```
 
 1. Dùng task test riêng, cùng project/ontology với validation; không import
    prediction hay nhãn validation. Chọn **Lexicographical** và segment size số
