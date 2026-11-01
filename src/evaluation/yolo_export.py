@@ -26,6 +26,7 @@ from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
 from src.evaluation.change_detection import BoundingBox
 from src.evaluation.bbox_aliases import normalize_label, resolve_label
+from src.evaluation.bbox_class_conflict import suppress_ambulance_conflicts
 from src.evaluation.bbox_prompt_supplement import detect_with_supplemental_prompts, validate_prompt_classes
 from src.evaluation.image_files import list_images
 from src.evaluation.grounding_postprocess import GroundingPostprocessRequest, postprocess_grounding
@@ -151,11 +152,13 @@ class RescueDetector:
     nms_iou_threshold: float = SDQM_NMS_IOU_THRESHOLD
     device: str | None = None
     supplemental_prompts: list[dict] = field(default_factory=list)
+    cross_class_iou_threshold: float | None = None
     postprocess_mode: str | None = field(default=None, init=False)
     raw_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     alias_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     unmapped_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     supplemental_prompt_counts: dict[str, Counter] = field(default_factory=dict, init=False, repr=False)
+    cross_class_conflict_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     _processor: AutoProcessor | None = field(default=None, init=False, repr=False)
     _model: AutoModelForZeroShotObjectDetection | None = field(
         default=None,
@@ -195,6 +198,9 @@ class RescueDetector:
         )
         for prompt, values in counts.items():
             self.supplemental_prompt_counts.setdefault(prompt, Counter()).update(values)
+        if self.cross_class_iou_threshold is not None:
+            detections, removed = suppress_ambulance_conflicts(detections, self.cross_class_iou_threshold)
+            self.cross_class_conflict_counts.update({"images_processed": 1, "ambulance_suppressed": removed})
         return detections
 
     def _detect_prompt(self, image: Image.Image, prompt: str) -> list[DetectedObject]:

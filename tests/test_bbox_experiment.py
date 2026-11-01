@@ -20,6 +20,21 @@ def digest(content: bytes) -> str:
 
 
 class BoundingBoxExperimentTests(unittest.TestCase):
+    def test_cross_class_conflict_config_validation(self) -> None:
+        base = json.loads(Path("config/bounding_box/dino-ambulance-min030.json").read_text(encoding="utf-8"))
+        self.assertIsNone(ExperimentConfig.from_dict(base).cross_class_iou_threshold)
+        self.assertEqual(ExperimentConfig.from_dict({**base, "cross_class_iou_threshold": .75}).cross_class_iou_threshold, .75)
+        for value in (0, -0.1, 1.1, True, "0.75", float("nan")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                ExperimentConfig.from_dict({**base, "cross_class_iou_threshold": value})
+
+    def test_conflict_config_only_changes_cross_class_threshold(self) -> None:
+        root = Path("config/bounding_box")
+        control = ExperimentConfig.from_dict(json.loads((root / "dino-ambulance-min030.json").read_text(encoding="utf-8"))).as_dict()
+        candidate = ExperimentConfig.from_dict(json.loads((root / "dino-ambulance-conflict075.json").read_text(encoding="utf-8"))).as_dict()
+        self.assertEqual({key for key in control if control[key] != candidate[key]}, {"name", "cross_class_iou_threshold"})
+        self.assertEqual(candidate["cross_class_iou_threshold"], 0.75)
+
     def setUp(self) -> None:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

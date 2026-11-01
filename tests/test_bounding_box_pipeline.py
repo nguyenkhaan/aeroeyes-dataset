@@ -92,6 +92,17 @@ class BoundingBoxSlurmTests(unittest.TestCase):
 
 
 class GroundingDinoConversionTests(unittest.TestCase):
+    def test_cross_class_conflict_is_opt_in_and_counts_removed_boxes(self) -> None:
+        ambulance = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.9)
+        vehicle = DetectedObject(4, "emergency_vehicle", BoundingBox(0, 0, 20, 20, 400, 0), 0.4)
+        detector = RescueDetector(text_prompt="base", class_map={"ambulance": 3, "emergency_vehicle": 4},
+                                  cross_class_iou_threshold=0.75)
+        detector._model = object()
+        detector._processor = object()
+        with patch.object(detector, "_detect_prompt", return_value=[ambulance, vehicle]):
+            self.assertEqual(detector.detect_objects(object()), [vehicle])
+        self.assertEqual(detector.cross_class_conflict_counts, {"images_processed": 1, "ambulance_suppressed": 1})
+
     def test_supplement_confidence_does_not_filter_base_detection(self) -> None:
         base = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.2)
         supplemental = DetectedObject(3, "ambulance", BoundingBox(30, 30, 50, 50, 400, 0), 0.39)

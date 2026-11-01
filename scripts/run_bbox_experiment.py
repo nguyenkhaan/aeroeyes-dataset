@@ -104,6 +104,7 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
         model_name=config.model_id,
         text_prompt=config.prompt,
         supplemental_prompts=config.supplemental_prompts,
+        cross_class_iou_threshold=config.cross_class_iou_threshold,
         box_threshold=config.box_threshold,
         text_threshold=config.text_threshold,
         class_thresholds={"rescue_boat": config.rescue_boat_threshold},
@@ -148,6 +149,7 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
         "supplemental_prompt_counts": {
             prompt: dict(counts) for prompt, counts in sorted(detector.supplemental_prompt_counts.items())
         },
+        "cross_class_conflict_counts": dict(sorted(detector.cross_class_conflict_counts.items())),
         "torch": torch.__version__,
         "transformers": transformers.__version__,
         "cuda_build": torch.version.cuda,

@@ -20,16 +20,23 @@ class ExperimentConfig:
     seed: int
     label_mapping_mode: str = "exact"
     supplemental_prompts: list[dict] = field(default_factory=list)
+    cross_class_iou_threshold: float | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> ExperimentConfig:
         if not isinstance(data, dict):
             raise ValueError("Experiment config must be an object")
-        data = {"label_mapping_mode": "exact", "supplemental_prompts": [], **data}
+        data = {"label_mapping_mode": "exact", "supplemental_prompts": [], "cross_class_iou_threshold": None, **data}
         if set(data) != set(cls.__dataclass_fields__):
             raise ValueError("Experiment config must contain exactly the documented fields")
         if data["label_mapping_mode"] not in ("exact", "firefighter_compound"):
             raise ValueError("Invalid label mapping mode")
+        conflict_iou = data["cross_class_iou_threshold"]
+        if conflict_iou is not None and (
+            isinstance(conflict_iou, bool) or not isinstance(conflict_iou, (int, float))
+            or not math.isfinite(conflict_iou) or not 0 < conflict_iou <= 1
+        ):
+            raise ValueError("cross_class_iou_threshold must be null or a finite number in (0, 1]")
         prompts = data["supplemental_prompts"]
         if not isinstance(prompts, list) or any(
             not isinstance(item, dict) or not {"class_name", "prompt"} <= set(item)
@@ -72,7 +79,8 @@ class ExperimentConfig:
             thresholds[key] = float(value)
         return cls(name=name, model_id=model_id, prompt=prompt, seed=seed,
                    label_mapping_mode=data["label_mapping_mode"],
-                   supplemental_prompts=[dict(item) for item in prompts], **thresholds)
+                   supplemental_prompts=[dict(item) for item in prompts],
+                   cross_class_iou_threshold=conflict_iou, **thresholds)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -183,7 +191,7 @@ def select_ground_truth(document: dict, records: list[dict], manifest_hash: str)
 def compare_experiment_runs(baseline: Path, candidate: Path, varying: str) -> dict:
     allowed = {
         "box_threshold", "text_threshold", "rescue_boat_threshold",
-        "nms_iou_threshold", "prompt", "label_mapping_mode", "supplemental_prompts",
+        "nms_iou_threshold", "prompt", "label_mapping_mode", "supplemental_prompts", "cross_class_iou_threshold",
     }
     if varying not in allowed:
         raise ValueError(f"Unsupported varying field: {varying}")

@@ -476,6 +476,21 @@ theo từng lớp lẫn toàn pipeline. Lưu ý GT chỉ có tám ambulance và 
 giữa các prompt không nhất thiết được hiệu chuẩn; không chọn kết luận cuối chỉ
 dựa trên mẫu validation này. Chỉ mở tập test sau khi đã chọn cấu hình.
 
+#### Thử xử lý xung đột ambulance và emergency_vehicle
+
+`dino-ambulance-conflict075.json` giống `dino-ambulance-min030.json`, chỉ bật
+`cross_class_iou_threshold=0.75`. Sau NMS cùng lớp, mỗi box `ambulance` bị bỏ
+nếu có box `emergency_vehicle` dự đoán cùng ảnh với IoU >= 0.75; các box xe cứu
+hộ được giữ bất kể confidence tương đối. Áp dụng cho cả Before và After trước
+matching, không dùng GT trong inference. Đây là quy tắc thử nghiệm theo ưu tiên
+lớp, không chứng minh hai box cùng một đối tượng và có thể loại ambulance thật.
+
+Chạy đối chứng và ứng viên bằng cùng commit và cùng 40 cặp validation, sau đó
+đánh giá hai report trên cùng GT v2. So sánh riêng TP/FP/FN của cả hai lớp,
+recall toàn pipeline và `cross_class_conflict_counts` trong run manifest. Bộ đếm
+bao gồm cả Before và After; không đồng nghĩa với số FP được loại. Ngưỡng 0.75 là
+giá trị thăm dò, không được chọn dựa trên kết quả test.
+
 Sau khi commit và pull cùng phiên bản code, chạy hai job 40 cặp:
 
 ```bash

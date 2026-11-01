@@ -20,7 +20,7 @@ def main() -> int:
     parser.add_argument("--candidate", required=True, type=Path)
     parser.add_argument(
         "--vary", default="box_threshold",
-        choices=("box_threshold", "text_threshold", "rescue_boat_threshold", "nms_iou_threshold", "prompt", "label_mapping_mode", "supplemental_prompts"),
+        choices=("box_threshold", "text_threshold", "rescue_boat_threshold", "nms_iou_threshold", "prompt", "label_mapping_mode", "supplemental_prompts", "cross_class_iou_threshold"),
     )
     args = parser.parse_args()
     result = compare_experiment_runs(args.baseline, args.candidate, args.vary)
