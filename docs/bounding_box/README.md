@@ -553,3 +553,34 @@ venv/bin/python scripts/run_bbox_experiment.py \
   --output-dir "$BENCH_DIR/runs/prepare-check-$(date +%Y%m%d-%H%M%S)" \
   --limit 5 --prepare-only
 ```
+# CLIP vehicle-conflict score experiment
+
+`scripts/score_bbox_vehicle_conflicts.py` is a diagnostic first step for the
+ambulance/fire-truck confusion. It reads a frozen validation run with conflict
+suppression disabled, checks its saved strict-v2 metrics and report checksums,
+and checks the original Before/After image checksums. For every predicted
+ambulance with IoU >= 0.75 against a predicted `emergency_vehicle` in the same
+image, it scores the ambulance crop plus 10% context with CLIP against the fixed
+texts `a photo of an ambulance` and `a photo of a fire truck`. Both Before and
+After detections are included. The output retains prediction indexes, boxes,
+overlaps, raw cosine similarities, their difference and model/run provenance.
+
+This is a two-prompt exploratory diagnostic, not a calibrated classifier or a
+measurement of pipeline precision/recall. It does not apply a threshold, alter
+reports, change labels, or use ground truth to choose crops. The first run may
+download `openai/clip-vit-base-patch16` to the configured model cache. Model
+revision is recorded when the installed Transformers version exposes it.
+
+On the cluster, from the project root:
+
+```bash
+mkdir -p logs
+sbatch scripts/bbox_vehicle_clip.slurm 8252
+```
+
+Once completed, the log identifies `strict-v2-results/vehicle-clip-JOBID.json`.
+Use a fresh job ID for each run; outputs are never overwritten. Compare the
+score distribution against the unchanged strict-v2 ground truth in a separate
+analysis step. Any threshold selection is exploratory on validation; the held
+out test set must not be used for tuning. Raw score improvements alone must not
+be presented as an improvement in final pipeline recall or precision.
