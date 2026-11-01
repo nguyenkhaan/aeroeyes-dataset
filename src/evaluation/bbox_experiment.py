@@ -32,7 +32,8 @@ class ExperimentConfig:
             raise ValueError("Invalid label mapping mode")
         prompts = data["supplemental_prompts"]
         if not isinstance(prompts, list) or any(
-            not isinstance(item, dict) or set(item) != {"class_name", "prompt"}
+            not isinstance(item, dict) or not {"class_name", "prompt"} <= set(item)
+            or not set(item) <= {"class_name", "prompt", "min_confidence"}
             or not isinstance(item.get("class_name"), str)
             or item.get("class_name") not in {"ambulance", "emergency_vehicle"}
             or not isinstance(item.get("prompt"), str) or not item["prompt"].strip()
@@ -41,6 +42,16 @@ class ExperimentConfig:
             raise ValueError("Invalid supplemental prompts")
         if len({item["prompt"].strip().lower() for item in prompts}) != len(prompts):
             raise ValueError("Duplicate supplemental prompts")
+        for item in prompts:
+            if "min_confidence" in item:
+                value = item["min_confidence"]
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    or not 0 <= value <= 1
+                ):
+                    raise ValueError("Supplemental min_confidence must be a finite number in [0, 1]")
         name, model_id, prompt = (data[key] for key in ("name", "model_id", "prompt"))
         if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
             raise ValueError("Experiment name must use only letters, digits, hyphen or underscore")

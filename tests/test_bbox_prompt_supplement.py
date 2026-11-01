@@ -34,10 +34,22 @@ class SupplementalPromptTests(unittest.TestCase):
         result, counts = detect_with_supplemental_prompts("base", prompts, detect, nms)
         self.assertEqual(calls, ["base", "ambulance ."])
         self.assertEqual([(x.label, x.box) for x in result], [("firefighter", "a"), ("ambulance", "b")])
-        self.assertEqual(counts, {"ambulance .": {"raw": 2, "target_class": 1}})
+        self.assertEqual(counts, {"ambulance .": {"raw": 2, "target_class": 1, "after_confidence": 1}})
 
     def test_empty_supplements_preserve_baseline(self):
         result, counts = detect_with_supplemental_prompts(
             "base", [], lambda prompt: [Detection("firefighter", .8, "a")], lambda x: x)
         self.assertEqual(len(result), 1)
         self.assertEqual(counts, {})
+
+    def test_threshold_filters_only_supplemental_class_before_nms(self):
+        base = Detection("ambulance", .20, "base")
+        low = Detection("ambulance", .39, "low")
+        at_threshold = Detection("ambulance", .40, "threshold")
+        wrong_class = Detection("firefighter", .95, "wrong")
+        def detect(prompt):
+            return [base] if prompt == "base" else [low, at_threshold, wrong_class]
+        prompts = [{"class_name": "ambulance", "prompt": "ambulance .", "min_confidence": .40}]
+        result, counts = detect_with_supplemental_prompts("base", prompts, detect, lambda x: x)
+        self.assertEqual(result, [base, at_threshold])
+        self.assertEqual(counts["ambulance ."]["after_confidence"], 1)

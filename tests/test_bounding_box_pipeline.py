@@ -92,6 +92,18 @@ class BoundingBoxSlurmTests(unittest.TestCase):
 
 
 class GroundingDinoConversionTests(unittest.TestCase):
+    def test_supplement_confidence_does_not_filter_base_detection(self) -> None:
+        base = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.2)
+        supplemental = DetectedObject(3, "ambulance", BoundingBox(30, 30, 50, 50, 400, 0), 0.39)
+        detector = RescueDetector(text_prompt="base", class_map={"ambulance": 3},
+                                  aliases={"ambulance": "ambulance"},
+                                  supplemental_prompts=[{"class_name": "ambulance", "prompt": "ambulance .", "min_confidence": 0.4}])
+        detector._model = object()
+        detector._processor = object()
+        with patch.object(detector, "_detect_prompt", side_effect=[[base], [supplemental]]):
+            self.assertEqual(detector.detect_objects(object()), [base])
+        self.assertEqual(detector.supplemental_prompt_counts["ambulance ."]["after_confidence"], 0)
+
     def test_supplemental_prompts_merge_after_class_filter_and_nms(self) -> None:
         from src.evaluation.change_detection import BoundingBox
 
@@ -108,7 +120,8 @@ class GroundingDinoConversionTests(unittest.TestCase):
 
         self.assertEqual(result, [better])
         self.assertEqual(detect.call_count, 2)
-        self.assertEqual(detector.supplemental_prompt_counts["ambulance ."], {"raw": 2, "target_class": 1})
+        self.assertEqual(detector.supplemental_prompt_counts["ambulance ."],
+                         {"raw": 2, "target_class": 1, "after_confidence": 1})
     def test_aliases_return_canonical_labels_and_keep_class_thresholds(self) -> None:
         objects = _processed_result_to_objects(
             {

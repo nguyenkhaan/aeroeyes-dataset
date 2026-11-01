@@ -15,6 +15,14 @@ def detect_with_supplemental_prompts(base_prompt, prompts, detect, nms):
     for item in prompts:
         raw = list(detect(item["prompt"]))
         selected = [detection for detection in raw if detection.label == item["class_name"]]
-        counts[item["prompt"]] = {"raw": len(raw), "target_class": len(selected)}
-        detections.extend(selected)
+        retained = [
+            detection for detection in selected
+            if detection.confidence >= item.get("min_confidence", 0.0)
+        ]
+        counts[item["prompt"]] = {
+            "raw": len(raw),
+            "target_class": len(selected),
+            "after_confidence": len(retained),
+        }
+        detections.extend(retained)
     return nms(detections), counts

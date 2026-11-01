@@ -437,6 +437,24 @@ Các prompt phải khớp alias được phép trong ontology. Confidence giữa
 không nhất thiết được hiệu chuẩn như nhau; đây là thử nghiệm, không đảm bảo tăng
 recall hoặc precision.
 
+#### Điều chỉnh ngưỡng prompt bổ sung ambulance
+
+Các config `dino-ambulance-min030.json`, `dino-ambulance-min045.json` và
+`dino-ambulance-min060.json` chỉ thêm `min_confidence` tương ứng 0.30, 0.45,
+0.60 cho prompt bổ sung `ambulance`; ba mức là điểm thăm dò, chưa được hiệu
+chuẩn. Ngưỡng được áp dụng sau postprocess, trước NMS gộp, cho cả Before và
+After. Confidence bằng ngưỡng được giữ. Box prompt gốc không bị lọc bởi ngưỡng
+này, nhưng có thể bị ảnh hưởng gián tiếp bởi NMS và before/after matching.
+Prompt `fire truck` và `fire engine` giữ nguyên. Thống kê `after_confidence`
+trong run manifest đếm detection được giữ trước NMS trên cả hai ảnh, không phải
+TP hoặc số đối tượng riêng biệt.
+
+So sánh ba config với `dino-supplemental-vehicles.json`, chạy tất cả bằng cùng
+commit và đánh giá cùng GT validation v2. Kiểm tra precision/recall, TP/FP/FN
+theo từng lớp lẫn toàn pipeline. Lưu ý GT chỉ có tám ambulance và confidence
+giữa các prompt không nhất thiết được hiệu chuẩn; không chọn kết luận cuối chỉ
+dựa trên mẫu validation này. Chỉ mở tập test sau khi đã chọn cấu hình.
+
 Sau khi commit và pull cùng phiên bản code, chạy hai job 40 cặp:
 
 ```bash

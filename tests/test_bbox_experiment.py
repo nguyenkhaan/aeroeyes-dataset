@@ -110,6 +110,15 @@ class BoundingBoxExperimentTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 ExperimentConfig.from_dict({**base, "supplemental_prompts": invalid})
 
+    def test_supplemental_confidence_validation_and_roundtrip(self) -> None:
+        base = json.loads(Path("config/bounding_box/dino-prompt-control.json").read_text(encoding="utf-8"))
+        prompt = {"class_name": "ambulance", "prompt": "ambulance .", "min_confidence": 0.4}
+        config = ExperimentConfig.from_dict({**base, "supplemental_prompts": [prompt]})
+        self.assertEqual(ExperimentConfig.from_dict(config.as_dict()).supplemental_prompts, [prompt])
+        for value in (-0.1, 1.1, True, "0.4", float("nan"), None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                ExperimentConfig.from_dict({**base, "supplemental_prompts": [{**prompt, "min_confidence": value}]})
+
     def test_prompt_configs_change_only_prompt_and_run_name(self) -> None:
         baseline = ExperimentConfig.from_dict(json.loads(
             Path("config/bounding_box/dino-prompt-control.json").read_text(encoding="utf-8")
@@ -140,6 +149,15 @@ class BoundingBoxExperimentTests(unittest.TestCase):
         candidate = ExperimentConfig.from_dict(json.loads((root / "dino-supplemental-vehicles.json").read_text(encoding="utf-8"))).as_dict()
         self.assertEqual({key for key in control if control[key] != candidate[key]}, {"name", "supplemental_prompts"})
         self.assertEqual(len(candidate["supplemental_prompts"]), 3)
+
+    def test_ambulance_threshold_configs_only_change_the_ambulance_threshold(self) -> None:
+        root = Path("config/bounding_box")
+        control = ExperimentConfig.from_dict(json.loads((root / "dino-supplemental-vehicles.json").read_text(encoding="utf-8"))).as_dict()
+        for suffix, threshold in (("030", 0.30), ("045", 0.45), ("060", 0.60)):
+            config = ExperimentConfig.from_dict(json.loads((root / f"dino-ambulance-min{suffix}.json").read_text(encoding="utf-8"))).as_dict()
+            self.assertEqual({key for key in control if control[key] != config[key]}, {"name", "supplemental_prompts"})
+            self.assertEqual(config["supplemental_prompts"][0], {**control["supplemental_prompts"][0], "min_confidence": threshold})
+            self.assertEqual(config["supplemental_prompts"][1:], control["supplemental_prompts"][1:])
 
     def test_cli_help_does_not_load_gpu_dependencies(self) -> None:
         result = subprocess.run(
