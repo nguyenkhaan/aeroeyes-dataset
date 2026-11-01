@@ -426,6 +426,27 @@ venv/bin/python scripts/evaluate_bbox_strict_v2.py \
   --output /duong-dan/metrics-strict-v2-8105.json
 ```
 
+### Phân tích lỗi FP và FN trên validation v2
+
+`scripts/analyze_bbox_strict_errors.py` kiểm tra checksum GT, manifest và từng
+report so với file metrics, rồi đối chiếu TP/FP/FN/ignore theo từng lớp với
+evaluator trước khi xuất `analysis.json` và `fp_fn.csv` vào thư mục mới. Không
+cần chạy GPU. Các nhãn `duplicate_confirmed`, `overlap_existing`,
+`overlap_other_class`, `same_class_iou_030_050`, `overlap_ignore_already_used`,
+`unmatched` chỉ mô tả quan hệ hình học theo thứ tự ưu tiên, không chứng minh
+nguyên nhân. CSV chứa pair ID, tên frame CVAT, đường dẫn ảnh nếu có trong run
+manifest, tọa độ và confidence; summary chỉ ra tối đa năm cặp nhiều FP nhất mỗi
+lớp. Đối tượng ignore không phải ground truth âm, và một FP có thể là đối tượng
+chưa được gán nhãn. Bản GT vẫn có giới hạn một người rà soát.
+
+```bash
+venv/bin/python scripts/analyze_bbox_strict_errors.py \
+  --ground-truth /duong-dan/validation-v2-adapted.json \
+  --run-dir /duong-dan/bbox-experiment-8240 \
+  --metrics /duong-dan/metrics-8240.json \
+  --output-dir /duong-dan/analysis-8240
+```
+
 ### Thử prompt bổ sung cho xe cứu hộ
 
 `dino-supplemental-vehicles.json` giữ nguyên prompt, ngưỡng và mapping của
