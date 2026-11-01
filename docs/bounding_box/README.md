@@ -387,6 +387,20 @@ cho biết số label sau postprocess, số lần alias tự động được d�
 không map được. Đây là số detection trước lọc bổ sung/NMS trên cả Before và
 After, không phải số object thật hay số object duy nhất.
 
+### Chuyển manifest Ground Truth validation v2
+
+`scripts/adapt_bbox_strict_v2.py` đọc manifest trong ZIP v2, kiểm tra ID với
+benchmark validation và tách `after_objects` khỏi `ignore_regions`. Output lưu
+checksum nguồn và giữ nguyên `generation_status`. Đây là bước chuẩn bị: evaluator
+hiện tại chủ động từ chối output này; chưa dùng file để chạy hay so sánh metric.
+
+```bash
+venv/bin/python scripts/adapt_bbox_strict_v2.py \
+  --bundle /duong-dan/AeroEyes_GT_VALIDATION_V2_FINAL.zip \
+  --benchmark-manifest /duong-dan/bbox-gt-v1-manifest.json \
+  --output /duong-dan/validation-v2-adapted.json
+```
+
 ### Thử ánh xạ nhãn ghép firefighter
 
 Job 8095 có nhiều label thô `firefighter_fire_fighter`. Phép thử tiếp theo

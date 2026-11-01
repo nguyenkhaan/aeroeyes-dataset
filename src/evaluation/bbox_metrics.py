@@ -258,6 +258,8 @@ def _matching_predictions(report: dict, field_name: str) -> tuple[Prediction, ..
 
 
 def _prepare_pair(ground_truth: dict, report: dict | None) -> PairData:
+    if "ignore_regions" in ground_truth:
+        raise ValueError("Explicit ignore_regions require a strict-v2 evaluator")
     try:
         pair_id = str(ground_truth["pair_id"])
         generation_status = str(ground_truth["generation_status"])
