@@ -447,6 +447,22 @@ venv/bin/python scripts/analyze_bbox_strict_errors.py \
   --output-dir /duong-dan/analysis-8240
 ```
 
+### Hình đối chiếu xung đột ambulance và emergency_vehicle
+
+`scripts/render_bbox_conflict_review.py` chọn tất cả đối tượng ambulance GT mới
+được ghép ở run đối chứng nhưng không được ghép ở run thử nghiệm, sau đó chọn
+thêm tối đa năm cặp có FP ambulance chồng lấn GT emergency_vehicle. Việc thay
+đổi ghép không tự chứng minh box nào bị loại trực tiếp do quy tắc. Hai run phải
+có cùng GT, code inference, model, cấu hình (ngoại trừ ngưỡng xung đột), report
+và checksum ảnh xác minh được. Không cần GPU; cần Pillow.
+
+Mỗi PNG gồm ảnh Before với GT, ảnh After với GT, dự đoán After của đối chứng,
+và dự đoán After của ứng viên. Hình chỉ vẽ lớp ambulance và emergency_vehicle;
+box GT mơ hồ có chữ `IGNORE`, box ambulance bị mất ghép có chữ `LOST`. Thư mục
+mới còn có `index.html` để xem hình và `index.json` ghi ID, tiêu chí chọn và
+checksum. File `review-bundle.zip` chứa các hình và index để tải về. Các hình
+là ví dụ phân tích validation, không phải đánh giá test.
+
 ### Thử prompt bổ sung cho xe cứu hộ
 
 `dino-supplemental-vehicles.json` giữ nguyên prompt, ngưỡng và mapping của
