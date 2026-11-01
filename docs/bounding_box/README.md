@@ -391,14 +391,39 @@ After, không phải số object thật hay số object duy nhất.
 
 `scripts/adapt_bbox_strict_v2.py` đọc manifest trong ZIP v2, kiểm tra ID với
 benchmark validation và tách `after_objects` khỏi `ignore_regions`. Output lưu
-checksum nguồn và giữ nguyên `generation_status`. Đây là bước chuẩn bị: evaluator
-hiện tại chủ động từ chối output này; chưa dùng file để chạy hay so sánh metric.
+checksum nguồn và giữ nguyên `generation_status`. Evaluator cũ chủ động từ chối
+output này; sử dụng `scripts/evaluate_bbox_strict_v2.py` để tính metric.
 
 ```bash
 venv/bin/python scripts/adapt_bbox_strict_v2.py \
   --bundle /duong-dan/AeroEyes_GT_VALIDATION_V2_FINAL.zip \
   --benchmark-manifest /duong-dan/bbox-gt-v1-manifest.json \
   --output /duong-dan/validation-v2-adapted.json
+```
+
+Evaluator v2 dùng toàn bộ cặp validation, kể cả cặp ambiguous hoặc sinh lỗi,
+và ghi riêng thống kê trạng thái sinh. Detector dùng tất cả confirmed After;
+pipeline dùng confirmed new. Ở cả hai tầng, positive được ghép trước với IoU
+0.5; vùng ignore cùng lớp/cặp được ghép một-một với dự đoán còn lại tại IoU
+0.5. Dự đoán trùng positive đã ghép vẫn được tính là FP. Kết quả gồm micro F1,
+macro F1 trên lớp có GT, IoU trung bình của các box đã ghép, thống kê theo lớp,
+và phép thử độ nhạy khi coi các vùng ignore là không có vùng bỏ qua. Chính sách
+v2 khác evaluator cũ nên không so trực tiếp metric giữa hai phiên bản GT.
+Sau khi tạo các file metric từ cùng GT, `scripts/compare_bbox_strict_v2.py`
+kiểm tra checksum ground truth, evaluator, phạm vi và ontology trước khi in
+kết quả và từng cấu hình. Cấu hình khác nhiều tham số chỉ cho phép so sánh
+tổng thể, không tách được tác động riêng của từng tham số.
+
+Có thể đánh giá lại report inference đã lưu, không cần chạy lại GPU. Lệnh từ chối
+report thiếu/thừa, checksum benchmark khác, job chưa hoàn tất và không ghi đè
+output. Hash của từng report được ghi tại thời điểm đánh giá; các job inference
+cũ chưa lưu hash từng report nên không thể xác minh chúng chưa thay đổi sau chạy.
+
+```bash
+venv/bin/python scripts/evaluate_bbox_strict_v2.py \
+  --ground-truth /duong-dan/validation-v2-adapted.json \
+  --run-dir /duong-dan/bbox-experiment-8105 \
+  --output /duong-dan/metrics-strict-v2-8105.json
 ```
 
 ### Thử ánh xạ nhãn ghép firefighter
