@@ -426,6 +426,32 @@ venv/bin/python scripts/evaluate_bbox_strict_v2.py \
   --output /duong-dan/metrics-strict-v2-8105.json
 ```
 
+### Thử prompt bổ sung cho xe cứu hộ
+
+`dino-supplemental-vehicles.json` giữ nguyên prompt, ngưỡng và mapping của
+`dino-prompt-control.json`, sau đó chạy thêm ba prompt độc lập `ambulance`,
+`fire truck`, `fire engine` trên cả Before và After. Chỉ box thuộc lớp mục tiêu
+được giữ từ mỗi lượt bổ sung. Tất cả box gốc và bổ sung được NMS cùng lớp trước
+khi vào pipeline; box bổ sung có thể thay box gốc nếu có confidence cao hơn.
+Các prompt phải khớp alias được phép trong ontology. Confidence giữa các prompt
+không nhất thiết được hiệu chuẩn như nhau; đây là thử nghiệm, không đảm bảo tăng
+recall hoặc precision.
+
+Sau khi commit và pull cùng phiên bản code, chạy hai job 40 cặp:
+
+```bash
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-prompt-control.json 40
+sbatch scripts/bbox_experiment.slurm config/bounding_box/dino-supplemental-vehicles.json 40
+```
+
+Script SLURM vẫn ghi metric v1 trong mỗi run; dùng
+`scripts/evaluate_bbox_strict_v2.py` với `strict-v2-results/validation-v2-adapted.json`
+để đánh giá cả hai report theo GT v2, rồi dùng `compare_bbox_strict_v2.py`.
+Run manifest ghi `supplemental_prompt_counts` cho từng prompt trên cả Before và
+After trước NMS tổng hợp; đó không phải số đối tượng duy nhất hoặc số TP.
+Lượt inference bổ sung làm tăng thời gian chạy. Kết quả mới vẫn mang giới hạn
+GT một người rà soát và không thay thế đánh giá trên tập test.
+
 ### Thử ánh xạ nhãn ghép firefighter
 
 Job 8095 có nhiều label thô `firefighter_fire_fighter`. Phép thử tiếp theo

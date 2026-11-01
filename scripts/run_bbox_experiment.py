@@ -71,6 +71,7 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
     from src.core.config import SDQM_YOLO_DATA_YAML
     from src.evaluation.bounding_box_pipeline import _process_record
     from src.evaluation.bbox_aliases import build_alias_map, experiment_alias_map
+    from src.evaluation.bbox_prompt_supplement import validate_prompt_classes
     from src.evaluation.grounding_postprocess import grounding_postprocess_parameters
     from src.evaluation.yolo_export import RescueDetector, load_class_map
 
@@ -98,9 +99,11 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
     ontology_hash = hashlib.sha256(ontology_bytes).hexdigest()
     ontology = yaml.safe_load(ontology_bytes)
     aliases = experiment_alias_map(build_alias_map(ontology, class_map), config.label_mapping_mode)
+    validate_prompt_classes(config.supplemental_prompts, aliases)
     detector = RescueDetector(
         model_name=config.model_id,
         text_prompt=config.prompt,
+        supplemental_prompts=config.supplemental_prompts,
         box_threshold=config.box_threshold,
         text_threshold=config.text_threshold,
         class_thresholds={"rescue_boat": config.rescue_boat_threshold},
@@ -141,6 +144,9 @@ def run_inference(records: list[dict], config: ExperimentConfig, output_dir: Pat
             "raw_labels": dict(sorted(detector.raw_label_counts.items())),
             "automatic_aliases": dict(sorted(detector.alias_label_counts.items())),
             "unmapped_labels": dict(sorted(detector.unmapped_label_counts.items())),
+        },
+        "supplemental_prompt_counts": {
+            prompt: dict(counts) for prompt, counts in sorted(detector.supplemental_prompt_counts.items())
         },
         "torch": torch.__version__,
         "transformers": transformers.__version__,

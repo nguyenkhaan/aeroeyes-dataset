@@ -26,6 +26,7 @@ from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
 from src.evaluation.change_detection import BoundingBox
 from src.evaluation.bbox_aliases import normalize_label, resolve_label
+from src.evaluation.bbox_prompt_supplement import detect_with_supplemental_prompts, validate_prompt_classes
 from src.evaluation.image_files import list_images
 from src.evaluation.grounding_postprocess import GroundingPostprocessRequest, postprocess_grounding
 from src.evaluation.object_matching import DetectedObject
@@ -149,10 +150,12 @@ class RescueDetector:
     )
     nms_iou_threshold: float = SDQM_NMS_IOU_THRESHOLD
     device: str | None = None
+    supplemental_prompts: list[dict] = field(default_factory=list)
     postprocess_mode: str | None = field(default=None, init=False)
     raw_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     alias_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
     unmapped_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    supplemental_prompt_counts: dict[str, Counter] = field(default_factory=dict, init=False, repr=False)
     _processor: AutoProcessor | None = field(default=None, init=False, repr=False)
     _model: AutoModelForZeroShotObjectDetection | None = field(
         default=None,
@@ -184,11 +187,25 @@ class RescueDetector:
         assert self._model is not None
         assert self._processor is not None
 
+        validate_prompt_classes(self.supplemental_prompts, self.aliases)
+        detections, counts = detect_with_supplemental_prompts(
+            self.text_prompt, self.supplemental_prompts,
+            lambda prompt: self._detect_prompt(image, prompt),
+            lambda items: _class_aware_nms(items, self.nms_iou_threshold),
+        )
+        for prompt, values in counts.items():
+            self.supplemental_prompt_counts.setdefault(prompt, Counter()).update(values)
+        return detections
+
+    def _detect_prompt(self, image: Image.Image, prompt: str) -> list[DetectedObject]:
+        assert self._model is not None
+        assert self._processor is not None
+
         rgb_image = image.convert("RGB")
         width, height = rgb_image.size
         inputs = self._processor(
             images=rgb_image,
-            text=self.text_prompt,
+            text=prompt,
             return_tensors="pt",
         ).to(self.device)
 
@@ -225,7 +242,7 @@ class RescueDetector:
                 aliases=self.aliases,
             ),
         )
-        return _class_aware_nms(detections, self.nms_iou_threshold)
+        return detections
 
     def detect(self, image: Image.Image) -> list[str]:
         width, height = image.size

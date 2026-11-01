@@ -4,7 +4,7 @@ import hashlib
 import json
 import math
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
@@ -19,16 +19,28 @@ class ExperimentConfig:
     nms_iou_threshold: float
     seed: int
     label_mapping_mode: str = "exact"
+    supplemental_prompts: list[dict] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> ExperimentConfig:
         if not isinstance(data, dict):
             raise ValueError("Experiment config must be an object")
-        data = {"label_mapping_mode": "exact", **data}
+        data = {"label_mapping_mode": "exact", "supplemental_prompts": [], **data}
         if set(data) != set(cls.__dataclass_fields__):
             raise ValueError("Experiment config must contain exactly the documented fields")
         if data["label_mapping_mode"] not in ("exact", "firefighter_compound"):
             raise ValueError("Invalid label mapping mode")
+        prompts = data["supplemental_prompts"]
+        if not isinstance(prompts, list) or any(
+            not isinstance(item, dict) or set(item) != {"class_name", "prompt"}
+            or not isinstance(item.get("class_name"), str)
+            or item.get("class_name") not in {"ambulance", "emergency_vehicle"}
+            or not isinstance(item.get("prompt"), str) or not item["prompt"].strip()
+            for item in prompts
+        ):
+            raise ValueError("Invalid supplemental prompts")
+        if len({item["prompt"].strip().lower() for item in prompts}) != len(prompts):
+            raise ValueError("Duplicate supplemental prompts")
         name, model_id, prompt = (data[key] for key in ("name", "model_id", "prompt"))
         if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
             raise ValueError("Experiment name must use only letters, digits, hyphen or underscore")
@@ -48,7 +60,8 @@ class ExperimentConfig:
                 raise ValueError(f"{key} must be a number in [0, 1]")
             thresholds[key] = float(value)
         return cls(name=name, model_id=model_id, prompt=prompt, seed=seed,
-                   label_mapping_mode=data["label_mapping_mode"], **thresholds)
+                   label_mapping_mode=data["label_mapping_mode"],
+                   supplemental_prompts=[dict(item) for item in prompts], **thresholds)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -159,7 +172,7 @@ def select_ground_truth(document: dict, records: list[dict], manifest_hash: str)
 def compare_experiment_runs(baseline: Path, candidate: Path, varying: str) -> dict:
     allowed = {
         "box_threshold", "text_threshold", "rescue_boat_threshold",
-        "nms_iou_threshold", "prompt", "label_mapping_mode",
+        "nms_iou_threshold", "prompt", "label_mapping_mode", "supplemental_prompts",
     }
     if varying not in allowed:
         raise ValueError(f"Unsupported varying field: {varying}")

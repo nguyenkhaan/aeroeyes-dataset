@@ -99,6 +99,17 @@ class BoundingBoxExperimentTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     ExperimentConfig.from_dict({**good, field: value})
 
+    def test_supplemental_prompts_validation_and_old_defaults(self) -> None:
+        path = Path("config/bounding_box/dino-prompt-control.json")
+        base = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(ExperimentConfig.from_dict(base).supplemental_prompts, [])
+        good = [{"class_name": "ambulance", "prompt": "ambulance ."}]
+        self.assertEqual(ExperimentConfig.from_dict({**base, "supplemental_prompts": good}).supplemental_prompts, good)
+        for invalid in ([{"class_name": "helicopter", "prompt": "ambulance ."}],
+                        [{"class_name": "ambulance", "prompt": ""}], good + good, "ambulance"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                ExperimentConfig.from_dict({**base, "supplemental_prompts": invalid})
+
     def test_prompt_configs_change_only_prompt_and_run_name(self) -> None:
         baseline = ExperimentConfig.from_dict(json.loads(
             Path("config/bounding_box/dino-prompt-control.json").read_text(encoding="utf-8")
@@ -122,6 +133,13 @@ class BoundingBoxExperimentTests(unittest.TestCase):
                          {"name", "label_mapping_mode"})
         self.assertEqual(baseline["label_mapping_mode"], "exact")
         self.assertEqual(candidate["label_mapping_mode"], "firefighter_compound")
+
+    def test_vehicle_experiment_changes_only_supplemental_prompts(self) -> None:
+        root = Path("config/bounding_box")
+        control = ExperimentConfig.from_dict(json.loads((root / "dino-prompt-control.json").read_text(encoding="utf-8"))).as_dict()
+        candidate = ExperimentConfig.from_dict(json.loads((root / "dino-supplemental-vehicles.json").read_text(encoding="utf-8"))).as_dict()
+        self.assertEqual({key for key in control if control[key] != candidate[key]}, {"name", "supplemental_prompts"})
+        self.assertEqual(len(candidate["supplemental_prompts"]), 3)
 
     def test_cli_help_does_not_load_gpu_dependencies(self) -> None:
         result = subprocess.run(

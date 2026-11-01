@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.evaluation.bounding_box_pipeline import (
     BoundingBoxRunConfig,
@@ -11,6 +12,7 @@ from src.evaluation.change_detection import BoundingBox
 from src.evaluation.object_matching import DetectedObject
 from src.evaluation.yolo_export import (
     DetectionConversionContext,
+    RescueDetector,
     _class_aware_nms,
     _processed_result_to_objects,
 )
@@ -90,6 +92,23 @@ class BoundingBoxSlurmTests(unittest.TestCase):
 
 
 class GroundingDinoConversionTests(unittest.TestCase):
+    def test_supplemental_prompts_merge_after_class_filter_and_nms(self) -> None:
+        from src.evaluation.change_detection import BoundingBox
+
+        base = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.7)
+        better = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.9)
+        wrong_class = DetectedObject(0, "firefighter", BoundingBox(30, 30, 50, 50, 400, 0), 0.8)
+        detector = RescueDetector(text_prompt="base", class_map={"ambulance": 3, "firefighter": 0},
+                                  aliases={"ambulance": "ambulance"},
+                                  supplemental_prompts=[{"class_name": "ambulance", "prompt": "ambulance ."}])
+        detector._model = object()
+        detector._processor = object()
+        with patch.object(detector, "_detect_prompt", side_effect=[[base], [better, wrong_class]]) as detect:
+            result = detector.detect_objects(object())
+
+        self.assertEqual(result, [better])
+        self.assertEqual(detect.call_count, 2)
+        self.assertEqual(detector.supplemental_prompt_counts["ambulance ."], {"raw": 2, "target_class": 1})
     def test_aliases_return_canonical_labels_and_keep_class_thresholds(self) -> None:
         objects = _processed_result_to_objects(
             {
