@@ -1,0 +1,27 @@
+run_name: grounding-dino-baseline-validation
+git_commit: REPLACE_WITH_COMMIT_SHA
+created_at: REPLACE_WITH_ISO_8601_TIMESTAMP
+split: validation
+dataset:
+  artifact: bbox-gt-v1
+  sha256: REPLACE_WITH_GROUND_TRUTH_SHA256
+ontology:
+  version: 1.0.0
+model:
+  detector: Grounding DINO
+  model_id: REPLACE_WITH_MODEL_ID
+  revision: REPLACE_WITH_MODEL_REVISION
+prompt: REPLACE_WITH_EXACT_PROMPT
+thresholds:
+  detection_confidence: REPLACE_WITH_VALUE
+  before_after_iou: REPLACE_WITH_VALUE
+  minimum_delta_overlap: REPLACE_WITH_VALUE
+environment:
+  python: REPLACE_WITH_VERSION
+  torch: REPLACE_WITH_VERSION
+  cuda: REPLACE_WITH_VERSION
+  gpu: REPLACE_WITH_GPU_NAME
+resources:
+  elapsed_seconds: REPLACE_WITH_VALUE
+  peak_vram_mb: REPLACE_WITH_VALUE
+seed: 20261020

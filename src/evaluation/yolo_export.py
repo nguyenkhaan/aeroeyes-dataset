@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import re
 import shutil
+from collections import Counter
 from dataclasses import dataclass, field
 from math import ceil, floor
 from pathlib import Path
@@ -25,7 +25,11 @@ from tqdm import tqdm
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 
 from src.evaluation.change_detection import BoundingBox
+from src.evaluation.bbox_aliases import normalize_label, resolve_label
+from src.evaluation.bbox_class_conflict import suppress_ambulance_conflicts
+from src.evaluation.bbox_prompt_supplement import detect_with_supplemental_prompts, validate_prompt_classes
 from src.evaluation.image_files import list_images
+from src.evaluation.grounding_postprocess import GroundingPostprocessRequest, postprocess_grounding
 from src.evaluation.object_matching import DetectedObject
 
 
@@ -43,14 +47,8 @@ def load_class_map(yaml_path: str | Path) -> dict[str, int]:
     return {str(name).lower(): index for index, name in enumerate(names)}
 
 
-def _normalize_label(label: str) -> str:
-    cleaned = label.strip().lower()
-    cleaned = re.sub(r"[^a-z0-9]+", "_", cleaned)
-    return cleaned.strip("_")
-
-
 def _label_to_class_id(label: str, class_map: dict[str, int]) -> int | None:
-    normalized = _normalize_label(label)
+    normalized = normalize_label(label)
     candidates = [
         normalized,
         normalized.replace("_", " "),
@@ -69,6 +67,7 @@ class DetectionConversionContext:
     image_height: int
     box_threshold: float
     class_thresholds: dict[str, float]
+    aliases: dict[str, str] = field(default_factory=dict)
 
 
 def _processed_result_to_objects(
@@ -84,8 +83,8 @@ def _processed_result_to_objects(
         strict=False,
     ):
         label_text = str(label)
-        normalized_label = _normalize_label(label_text)
-        class_id = _label_to_class_id(label_text, context.class_map)
+        normalized_label = resolve_label(label_text, context.aliases)
+        class_id = _label_to_class_id(normalized_label, context.class_map)
         if class_id is None:
             continue
         confidence = float(score)
@@ -146,11 +145,23 @@ class RescueDetector:
     box_threshold: float = SDQM_BOX_THRESHOLD
     text_threshold: float = SDQM_TEXT_THRESHOLD
     class_map: dict[str, int] = field(default_factory=dict)
+    aliases: dict[str, str] = field(default_factory=dict)
     class_thresholds: dict[str, float] = field(
         default_factory=lambda: dict(DEFAULT_CLASS_THRESHOLDS)
     )
     nms_iou_threshold: float = SDQM_NMS_IOU_THRESHOLD
     device: str | None = None
+    supplemental_prompts: list[dict] = field(default_factory=list)
+    cross_class_iou_threshold: float | None = None
+    vehicle_clip_filter: object | None = None
+    postprocess_mode: str | None = field(default=None, init=False)
+    raw_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    alias_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    unmapped_label_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    supplemental_prompt_counts: dict[str, Counter] = field(default_factory=dict, init=False, repr=False)
+    cross_class_conflict_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    vehicle_clip_counts: Counter[str] = field(default_factory=Counter, init=False, repr=False)
+    last_clip_decisions: list[dict] = field(default_factory=list, init=False, repr=False)
     _processor: AutoProcessor | None = field(default=None, init=False, repr=False)
     _model: AutoModelForZeroShotObjectDetection | None = field(
         default=None,
@@ -182,11 +193,36 @@ class RescueDetector:
         assert self._model is not None
         assert self._processor is not None
 
+        validate_prompt_classes(self.supplemental_prompts, self.aliases)
+        detections, counts = detect_with_supplemental_prompts(
+            self.text_prompt, self.supplemental_prompts,
+            lambda prompt: self._detect_prompt(image, prompt),
+            lambda items: _class_aware_nms(items, self.nms_iou_threshold),
+        )
+        for prompt, values in counts.items():
+            self.supplemental_prompt_counts.setdefault(prompt, Counter()).update(values)
+        if self.cross_class_iou_threshold is not None:
+            detections, removed = suppress_ambulance_conflicts(detections, self.cross_class_iou_threshold)
+            self.cross_class_conflict_counts.update({"images_processed": 1, "ambulance_suppressed": removed})
+        self.last_clip_decisions = []
+        if self.vehicle_clip_filter is not None:
+            if self.cross_class_iou_threshold is not None:
+                raise ValueError("CLIP and unconditional cross-class suppression cannot be combined")
+            detections, self.last_clip_decisions = self.vehicle_clip_filter.apply(image, detections)
+            self.vehicle_clip_counts.update({"images_processed": 1,
+                                             "conflicts": len(self.last_clip_decisions),
+                                             "ambulance_suppressed": sum(item["suppressed"] for item in self.last_clip_decisions)})
+        return detections
+
+    def _detect_prompt(self, image: Image.Image, prompt: str) -> list[DetectedObject]:
+        assert self._model is not None
+        assert self._processor is not None
+
         rgb_image = image.convert("RGB")
         width, height = rgb_image.size
         inputs = self._processor(
             images=rgb_image,
-            text=self.text_prompt,
+            text=prompt,
             return_tensors="pt",
         ).to(self.device)
 
@@ -194,21 +230,24 @@ class RescueDetector:
             outputs = self._model(**inputs)
 
         target_sizes = torch.tensor([[height, width]], device=self.device)
-        try:
-            processed = self._processor.post_process_grounded_object_detection(
-                outputs,
-                inputs.input_ids,
+        processed, self.postprocess_mode = postprocess_grounding(
+            self._processor,
+            GroundingPostprocessRequest(
+                outputs=outputs,
+                input_ids=inputs.input_ids,
+                target_sizes=target_sizes,
                 box_threshold=self.box_threshold,
                 text_threshold=self.text_threshold,
-                target_sizes=target_sizes,
-            )
-        except TypeError:
-            processed = self._processor.post_process_grounded_object_detection(
-                outputs,
-                inputs.input_ids,
-                threshold=self.box_threshold,
-                target_sizes=target_sizes,
-            )
+            ),
+        )
+        for label in processed[0].get("text_labels", processed[0].get("labels", [])):
+            normalized = normalize_label(str(label))
+            canonical = resolve_label(str(label), self.aliases)
+            self.raw_label_counts[normalized] += 1
+            if _label_to_class_id(canonical, self.class_map) is None:
+                self.unmapped_label_counts[normalized] += 1
+            elif canonical != normalized:
+                self.alias_label_counts[normalized] += 1
         detections = _processed_result_to_objects(
             processed[0],
             DetectionConversionContext(
@@ -217,9 +256,10 @@ class RescueDetector:
                 image_height=height,
                 box_threshold=self.box_threshold,
                 class_thresholds=self.class_thresholds,
+                aliases=self.aliases,
             ),
         )
-        return _class_aware_nms(detections, self.nms_iou_threshold)
+        return detections
 
     def detect(self, image: Image.Image) -> list[str]:
         width, height = image.size

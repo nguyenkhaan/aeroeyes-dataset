@@ -1,0 +1,10 @@
+{
+  "name": "dino-prompt-aliases",
+  "model_id": "IDEA-Research/grounding-dino-tiny",
+  "prompt": "firefighter . fire fighter . rescue boat . helicopter . ambulance . emergency vehicle . fire truck . fire engine . rescue truck .",
+  "box_threshold": 0.18,
+  "text_threshold": 0.18,
+  "rescue_boat_threshold": 0.33,
+  "nms_iou_threshold": 0.5,
+  "seed": 20261020
+}

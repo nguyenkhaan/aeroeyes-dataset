@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.evaluation.bounding_box_pipeline import (
     BoundingBoxRunConfig,
@@ -11,6 +12,7 @@ from src.evaluation.change_detection import BoundingBox
 from src.evaluation.object_matching import DetectedObject
 from src.evaluation.yolo_export import (
     DetectionConversionContext,
+    RescueDetector,
     _class_aware_nms,
     _processed_result_to_objects,
 )
@@ -90,6 +92,68 @@ class BoundingBoxSlurmTests(unittest.TestCase):
 
 
 class GroundingDinoConversionTests(unittest.TestCase):
+    def test_cross_class_conflict_is_opt_in_and_counts_removed_boxes(self) -> None:
+        ambulance = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.9)
+        vehicle = DetectedObject(4, "emergency_vehicle", BoundingBox(0, 0, 20, 20, 400, 0), 0.4)
+        detector = RescueDetector(text_prompt="base", class_map={"ambulance": 3, "emergency_vehicle": 4},
+                                  cross_class_iou_threshold=0.75)
+        detector._model = object()
+        detector._processor = object()
+        with patch.object(detector, "_detect_prompt", return_value=[ambulance, vehicle]):
+            self.assertEqual(detector.detect_objects(object()), [vehicle])
+        self.assertEqual(detector.cross_class_conflict_counts, {"images_processed": 1, "ambulance_suppressed": 1})
+
+    def test_supplement_confidence_does_not_filter_base_detection(self) -> None:
+        base = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.2)
+        supplemental = DetectedObject(3, "ambulance", BoundingBox(30, 30, 50, 50, 400, 0), 0.39)
+        detector = RescueDetector(text_prompt="base", class_map={"ambulance": 3},
+                                  aliases={"ambulance": "ambulance"},
+                                  supplemental_prompts=[{"class_name": "ambulance", "prompt": "ambulance .", "min_confidence": 0.4}])
+        detector._model = object()
+        detector._processor = object()
+        with patch.object(detector, "_detect_prompt", side_effect=[[base], [supplemental]]):
+            self.assertEqual(detector.detect_objects(object()), [base])
+        self.assertEqual(detector.supplemental_prompt_counts["ambulance ."]["after_confidence"], 0)
+
+    def test_supplemental_prompts_merge_after_class_filter_and_nms(self) -> None:
+        from src.evaluation.change_detection import BoundingBox
+
+        base = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.7)
+        better = DetectedObject(3, "ambulance", BoundingBox(0, 0, 20, 20, 400, 0), 0.9)
+        wrong_class = DetectedObject(0, "firefighter", BoundingBox(30, 30, 50, 50, 400, 0), 0.8)
+        detector = RescueDetector(text_prompt="base", class_map={"ambulance": 3, "firefighter": 0},
+                                  aliases={"ambulance": "ambulance"},
+                                  supplemental_prompts=[{"class_name": "ambulance", "prompt": "ambulance ."}])
+        detector._model = object()
+        detector._processor = object()
+        with patch.object(detector, "_detect_prompt", side_effect=[[base], [better, wrong_class]]) as detect:
+            result = detector.detect_objects(object())
+
+        self.assertEqual(result, [better])
+        self.assertEqual(detect.call_count, 2)
+        self.assertEqual(detector.supplemental_prompt_counts["ambulance ."],
+                         {"raw": 2, "target_class": 1, "after_confidence": 1})
+    def test_aliases_return_canonical_labels_and_keep_class_thresholds(self) -> None:
+        objects = _processed_result_to_objects(
+            {
+                "boxes": [BoxValue([0, 0, 20, 20]), BoxValue([30, 30, 50, 50]),
+                          BoxValue([60, 60, 80, 80])],
+                "scores": [0.4, 0.31, 0.4],
+                "text_labels": ["fire truck", "emergency boat", "rescue worker"],
+            },
+            DetectionConversionContext(
+                class_map={"emergency_vehicle": 4, "rescue_boat": 1, "firefighter": 0},
+                image_width=100,
+                image_height=100,
+                box_threshold=0.18,
+                class_thresholds={"rescue_boat": 0.33},
+                aliases={"fire_truck": "emergency_vehicle", "emergency_boat": "rescue_boat"},
+            ),
+        )
+
+        self.assertEqual([(item.label, item.class_id) for item in objects],
+                         [("emergency_vehicle", 4)])
+
     def test_processed_detection_keeps_class_confidence_and_clips_box(self) -> None:
         objects = _processed_result_to_objects(
             {

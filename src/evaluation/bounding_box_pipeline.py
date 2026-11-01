@@ -163,7 +163,9 @@ def _process_record(record: dict, detector: RescueDetector, output_dir: Path) ->
 
     delta_result = detect_change_delta(before_image, after_image)
     before_objects = detector.detect_objects(before_image)
+    before_clip_decisions = list(getattr(detector, "last_clip_decisions", []))
     after_objects = detector.detect_objects(after_image)
+    after_clip_decisions = list(getattr(detector, "last_clip_decisions", []))
     matching = match_and_refine_objects(before_objects, after_objects, delta_result)
 
     label_lines = [
@@ -200,6 +202,8 @@ def _process_record(record: dict, detector: RescueDetector, output_dir: Path) ->
         "label_path": str(directories["labels"] / f"{stem}.txt"),
         "visualization_path": str(directories["visualizations"] / f"{stem}.png"),
     }
+    if getattr(detector, "vehicle_clip_filter", None) is not None:
+        result["vehicle_clip_decisions"] = {"before": before_clip_decisions, "after": after_clip_decisions}
     _write_json(directories["reports"] / f"{stem}.json", result)
     return result
 

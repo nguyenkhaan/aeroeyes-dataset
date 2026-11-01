@@ -1,0 +1,16 @@
+{
+  "name": "dino-ambulance-min030",
+  "model_id": "IDEA-Research/grounding-dino-tiny",
+  "prompt": "firefighter . rescue boat . helicopter . ambulance . emergency vehicle .",
+  "box_threshold": 0.18,
+  "text_threshold": 0.18,
+  "rescue_boat_threshold": 0.33,
+  "nms_iou_threshold": 0.5,
+  "seed": 20261020,
+  "label_mapping_mode": "exact",
+  "supplemental_prompts": [
+    {"class_name": "ambulance", "prompt": "ambulance .", "min_confidence": 0.30},
+    {"class_name": "emergency_vehicle", "prompt": "fire truck ."},
+    {"class_name": "emergency_vehicle", "prompt": "fire engine ."}
+  ]
+}
