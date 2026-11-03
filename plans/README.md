@@ -9,6 +9,7 @@ trước. Không đánh giá trên test trước khi khóa cấu hình cuối.
 | Plan | Nội dung | Ưu tiên | Công sức | Phụ thuộc | Trạng thái |
 |---|---|---|---|---|---|
 | 001 | Hoàn thiện benchmark và pipeline auto-annotation bounding box | P0 | L | — | IN PROGRESS |
+| 002 | Kế hoạch tuần 03–08/11/2026: quy trình annotation, pilot và chuẩn bị validation | P0 | M | Kế thừa plan 001 | TODO |
 
 Trạng thái hợp lệ: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED`, `REJECTED`.
 

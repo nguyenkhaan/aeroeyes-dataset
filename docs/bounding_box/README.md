@@ -6,6 +6,7 @@ cặp ảnh Before/After.
 ## Thành phần giai đoạn 1
 
 - `annotation-guideline.md`: quy tắc ontology, vẽ box, new/existing và kiểm soát chất lượng.
+- `annotation-four-rounds.md`: dự thảo quy trình bốn round, checklist và calibration T2; cần nhóm thử trước khi khóa.
 - `../../config/bounding_box/ontology.yaml`: định nghĩa lớp và alias.
 - `../../config/bounding_box/benchmark.yaml`: protocol validation/test và metric.
 - `../../scripts/build_bbox_benchmark.py`: tạo manifest tái lập từ metadata sinh ảnh.

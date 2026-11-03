@@ -1,5 +1,9 @@
 # Hướng dẫn gán nhãn benchmark bounding box AeroEyes
 
+> Bản bổ sung T2 ngày 03/11/2026: **dự thảo để calibration**, chưa khóa cho
+> đợt annotation mới. Ontology và schema hiện hành chưa thay đổi. Quy trình thao
+> tác nằm tại [annotation-four-rounds.md](annotation-four-rounds.md).
+
 ## 1. Mục tiêu
 
 Benchmark đánh giá khả năng phát hiện, định vị và xác nhận các đối tượng cứu hộ
@@ -29,7 +33,7 @@ Mỗi object trong ảnh After phải có:
 - bounding box;
 - `is_newly_added`: `true`, `false` hoặc `ambiguous`;
 - `is_valid_rescue`: `true`, `false` hoặc `ambiguous`;
-- `occlusion`: `none`, `partial` hoặc `heavy`;
+- `occlusion_level` trong CVAT: `none`, `partial` hoặc `heavy`;
 - `annotation_notes` khi có điểm không rõ ràng.
 
 ## 3. Ontology
@@ -112,17 +116,72 @@ Phản ví dụ:
 - xe cứu thương;
 - xe địa hình hoặc xe tải thông thường không có dấu hiệu ứng cứu.
 
+### 3.6. Tình huống khó và cách ghi nhận
+
+- **Người mặc áo phản quang:** áo hoặc mũ bảo hộ thông thường, đứng gần xe cứu
+  hỏa, hay prompt yêu cầu firefighter không tự xác nhận người đó là firefighter.
+  Tìm thêm đặc điểm trang bị hoặc hoạt động chữa cháy. Nếu có ứng viên hợp lý
+  nhưng chưa đủ bằng chứng, đưa vào review; không đổi thành nhãn chắc chắn để
+  tăng số lượng.
+- **Xe cứu thương và xe khẩn cấp:** nhãn, chữ, biểu tượng và cấu trúc phải được
+  xem cùng ảnh. Xe van trắng hay đèn nhấp nháy đơn lẻ không đủ xác nhận xe cứu
+  thương. Nếu là xe cứu thương rõ ràng, chỉ dùng `ambulance`; xe chữa cháy rõ
+  ràng dùng `emergency_vehicle`. Với xe bị che, mờ hoặc biến dạng khiến không
+  phân biệt được, đưa review; không gán đồng thời cả hai lớp cho một xe.
+- **Thuyền và trực thăng:** thuyền dân dụng chưa thể hiện cứu hộ và dấu vết
+  trên trời không đủ nhận diện trực thăng không tự thành nhãn xác nhận. Xem
+  bối cảnh, ảnh Before/After và prompt; prompt không thay thế bằng chứng ảnh.
+- **Đối tượng nhỏ, chồng lấn hoặc bị che:** nếu phân biệt được từng đối tượng,
+  mỗi đối tượng có một box bao phần nhìn thấy. Không đặt ngưỡng kích thước
+  không có trong protocol. Nếu không đủ bằng chứng để tách hoặc xác định đối
+  tượng, ghi review và lý do; không đoán số lượng.
+- **Biến dạng do sinh ảnh:** nếu không đủ nhận diện lớp hoặc tính hợp lệ, không
+  tạo box chắc chắn chỉ vì prompt yêu cầu. Đánh giá `generation_status` riêng
+  với nhãn của những đối tượng khác vẫn nhận diện được.
+
+Với một ứng viên có lớp hợp lý nhưng tính cứu hộ chưa chắc, có thể lưu box ở
+lớp ứng viên cùng `is_valid_rescue=ambiguous` và giải thích trong
+`annotation_notes`; nếu tính mới không rõ thì ghi `is_newly_added=ambiguous`.
+Đây là ứng viên cần review, không phải GT xác nhận. Nếu không thể chọn lớp ứng
+viên có căn cứ, ghi vào **danh sách review ngoài annotation** với `pair_id`,
+Before/After, vị trí và lý do, thay vì ép một trong năm lớp. Không tự tạo nhãn
+`unknown` hoặc coi một vùng ignore theo lớp là có thể che mọi lớp. Khi adjudicate,
+giữ lại `ambiguous` nếu vẫn thiếu bằng chứng và nêu rõ giới hạn của cách biểu
+diễn trong artifact; không xóa âm thầm các trường hợp chưa xử lý.
+
+### 3.7. Tên lớp và thuật ngữ trong prompt
+
+Tên lớp chuẩn là năm mã ở mục 3 và không đổi theo tiếng Anh Anh/Mỹ. Bảng dưới
+giải thích cách dùng, **không tự bổ sung alias hoặc thay cấu hình**. Alias tự
+động hiện hành và từ cần review được định nghĩa trong ontology.
+
+| Thuật ngữ | Sử dụng trong annotation và prompt |
+|---|---|
+| `firefighter`, `fire fighter` | Alias đã có cho `firefighter`; vẫn cần xem bằng chứng trong ảnh. |
+| `fire engine`, `fire truck` | Cách gọi xe chữa cháy; cả hai đã là alias `emergency_vehicle`. Có thể thử làm prompt riêng, nhưng prompt không chứng minh đối tượng tồn tại. |
+| `ambulance` | Alias đã có cho `ambulance`; không đồng nhất với mọi `emergency vehicle`. |
+| `rescue boat`, `inflatable rescue boat` | Alias đã có cho `rescue_boat`; `boat` chung cần review bối cảnh. |
+| `helicopter`, `rescue helicopter` | Alias đã có cho `helicopter`; `aircraft` chung cần review. |
+| `rescue worker`, `emergency responder`, `paramedic`, `rescue vehicle` | Thuật ngữ rộng hoặc vai trò khác; không tự ánh xạ, cần review theo ontology. |
+
 ## 4. Quy tắc vẽ bounding box
 
 1. Vẽ box nhỏ nhất bao quanh toàn bộ phần nhìn thấy của một đối tượng.
 2. Không mở rộng box để chứa bóng, khói, vòi nước hoặc vật thể người đó đang cầm,
    trừ khi phần đó thuộc cấu trúc của phương tiện.
 3. Với đối tượng bị che một phần, box bao quanh phần nhìn thấy; đặt
-   `occlusion=partial` hoặc `heavy`.
+   `occlusion_level=partial` hoặc `heavy` trong CVAT.
 4. Với đối tượng bị cắt bởi biên ảnh, box dừng ở biên ảnh và ghi chú `truncated`.
 5. Hai người đứng sát nhau vẫn phải có hai box nếu phân biệt được từng người.
 6. Không vẽ một box chung cho một nhóm người hoặc nhiều phương tiện.
 7. Đối tượng quá mơ hồ để xác định lớp được đánh dấu review, không ép nhãn.
+
+`occlusion_level` mô tả mức bị **vật khác che**, không tự suy từ việc vật thể
+bị cắt ở biên. `none`: không thấy bị che; `partial`: còn nhận diện được phần
+đáng kể nhưng có phần bị che; `heavy`: bị che phần lớn, chỉ khi vẫn có đủ bằng
+chứng nhận diện. Chưa đặt ngưỡng phần trăm cứng; ghi lý do các ca ranh giới để
+calibration. Với trường hợp vừa che vừa cắt biên, ghi cả mức occlusion và note
+`truncated`.
 
 ## 5. Xác định đối tượng mới
 
@@ -146,6 +205,13 @@ trí tương đối, hình dạng, màu sắc, bối cảnh và quan hệ với 
 - `severe_scene_corruption`: bố cục hoặc phần lớn nội dung ảnh bị thay đổi/hỏng.
 - `ambiguous`: chưa đủ bằng chứng để kết luận; phải adjudicate.
 
+Phải xem `editing_instruction`/prompt gốc cùng Before và After khi kết luận yêu
+cầu sinh ảnh được đáp ứng. Nếu prompt thiếu hoặc không đủ bằng chứng, ghi
+`ambiguous` và lý do; không suy ra `missing_requested_object` chỉ từ ảnh.
+Mỗi frame After cần đúng một tag `pair_status` chứa `generation_status`, kể cả
+khi không có box. Không dùng tag này trên Before. Sau review, vẫn có thể giữ
+`ambiguous` nếu bằng chứng không đủ; ghi rõ ai đã xem và vì sao.
+
 Generation failure không được tính là detector false negative.
 
 ## 7. Quy trình kiểm soát chất lượng
@@ -157,6 +223,12 @@ Generation failure không được tính là detector false negative.
 5. Người review adjudicate mọi bất đồng và mọi nhãn `ambiguous`.
 6. Khóa artifact với version, checksum, ngày và người review.
 7. Mọi sửa đổi sau khi khóa phải tạo version mới và changelog.
+
+Gán thử 10 cặp là mục tiêu protocol, không coi là đã hoàn tất khi chưa có hai
+bộ nhãn và log thảo luận. Calibration dùng ảnh phát triển tách test; không dùng
+GT 40 cặp đang phân tích để giả định hai người gán độc lập nếu họ đã xem nhãn.
+Chi tiết chọn mẫu, biểu mẫu và điều kiện review ở
+[annotation-four-rounds.md](annotation-four-rounds.md).
 
 ## 8. Tách validation và test
 
